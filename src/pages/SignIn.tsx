@@ -1,7 +1,54 @@
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 const SignIn = () => {
+
+
+    const[email, setEmail] = useState("");
+    const[password, setPassword] = useState("");
+    const [error, setError] = useState(null);
+    const navigate = useNavigate();
+
+
+
+    const handleSignIn = async (e) => {
+        e.preventDefault();
+    
+        try {
+          const response = await fetch("http://localhost:8000/auth/login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ email, password }),
+          });
+    
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || "Failed to sign in");
+          }
+    
+          const data = await response.json();
+          console.log("Login successful:", data);
+    
+
+
+           // Store tokens in cookies
+        document.cookie = `access_token=${data.accessToken}; path=/; secure; httponly`;
+        document.cookie = `refresh_token=${data.refreshToken}; path=/; secure; httponly`;
+
+          // Store tokens in localStorage or cookies (if needed)
+          // Example:
+          // localStorage.setItem("access_token", data.access_token);
+    
+          // Navigate to the dashboard or home page
+          navigate("/dashboard");
+        } catch (err) {
+          setError(err.message);
+        }
+      };
+   
   return (
     <div className="min-h-screen relative overflow-hidden bg-editor-bg flex items-center justify-center">
       {/* Animated background elements */}
@@ -33,12 +80,16 @@ const SignIn = () => {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2, duration: 0.8 }}
             className="space-y-6"
+            onSubmit={handleSignIn}
           >
             <div className="relative">
               <input
                 type="email"
                 placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-3 border border-editor-accent/20 rounded-lg bg-transparent text-editor-text focus:outline-none focus:ring-2 focus:ring-editor-accent placeholder-editor-text/60"
+
               />
               <span className="absolute top-1/2 right-3 transform -translate-y-1/2 text-editor-accent">
                 ✉️
@@ -50,6 +101,8 @@ const SignIn = () => {
                 type="password"
                 placeholder="Password"
                 className="w-full px-4 py-3 border border-editor-accent/20 rounded-lg bg-transparent text-editor-text focus:outline-none focus:ring-2 focus:ring-editor-accent placeholder-editor-text/60"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
               />
               <span className="absolute top-1/2 right-3 transform -translate-y-1/2 text-editor-accent">
                 🔒
