@@ -1,15 +1,61 @@
+import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 const SignUp = () => {
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
+
+
+  console.log(email, password, fullName, confirmPassword);
+
+  const handleSignUp = async (e) => {
+    e.preventDefault();
+
+    // Check if passwords match
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
+    try {
+      const response = await fetch("http://localhost:8000/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: fullName,
+          email,
+          password,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to sign up");
+      }
+
+      const data = await response.json();
+      console.log("Sign-up successful:", data);
+
+      // Navigate to sign-in page after successful registration
+      navigate("/signin");
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   return (
     <div className="min-h-screen relative overflow-hidden bg-editor-bg flex items-center justify-center">
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-editor-accent/20 to-transparent rounded-full animate-spin-slow"></div>
         <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-to-tl from-editor-secondary/20 to-transparent rounded-full animate-spin-slow"></div>
-        <div className="absolute top-0 left-0 w-1/3 h-1/3 bg-gradient-radial from-editor-accent/30 to-transparent rounded-full filter blur-3xl animate-float"></div>
-        <div className="absolute bottom-0 right-0 w-1/3 h-1/3 bg-gradient-radial from-editor-secondary/30 to-transparent rounded-full filter blur-3xl animate-float" style={{ animationDelay: "-3s" }}></div>
       </div>
 
       {/* Main content */}
@@ -28,16 +74,25 @@ const SignUp = () => {
             Join us and start coding together!
           </p>
 
+          {error && (
+            <p className="text-center text-red-500">
+              {error}
+            </p>
+          )}
+
           <motion.form
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2, duration: 0.8 }}
             className="space-y-6"
+            onSubmit={handleSignUp}
           >
             <div className="relative">
               <input
                 type="text"
                 placeholder="Full Name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
                 className="w-full px-4 py-3 border border-editor-accent/20 rounded-lg bg-transparent text-editor-text focus:outline-none focus:ring-2 focus:ring-editor-accent placeholder-editor-text/60"
               />
               <span className="absolute top-1/2 right-3 transform -translate-y-1/2 text-editor-accent">
@@ -49,6 +104,8 @@ const SignUp = () => {
               <input
                 type="email"
                 placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-3 border border-editor-accent/20 rounded-lg bg-transparent text-editor-text focus:outline-none focus:ring-2 focus:ring-editor-accent placeholder-editor-text/60"
               />
               <span className="absolute top-1/2 right-3 transform -translate-y-1/2 text-editor-accent">
@@ -60,6 +117,8 @@ const SignUp = () => {
               <input
                 type="password"
                 placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-3 border border-editor-accent/20 rounded-lg bg-transparent text-editor-text focus:outline-none focus:ring-2 focus:ring-editor-accent placeholder-editor-text/60"
               />
               <span className="absolute top-1/2 right-3 transform -translate-y-1/2 text-editor-accent">
@@ -71,6 +130,8 @@ const SignUp = () => {
               <input
                 type="password"
                 placeholder="Confirm Password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full px-4 py-3 border border-editor-accent/20 rounded-lg bg-transparent text-editor-text focus:outline-none focus:ring-2 focus:ring-editor-accent placeholder-editor-text/60"
               />
               <span className="absolute top-1/2 right-3 transform -translate-y-1/2 text-editor-accent">

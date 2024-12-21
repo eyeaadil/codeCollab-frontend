@@ -11,6 +11,7 @@ const SignIn = () => {
     const navigate = useNavigate();
 
 
+    console.log(email, password);
 
     const handleSignIn = async (e) => {
         e.preventDefault();

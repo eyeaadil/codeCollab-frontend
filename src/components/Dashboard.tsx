@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { CodeEditor } from "./CodeEditor";
+// import { CodeEditor } from "./CodeEditor";
 import { Code2, Share2 } from "lucide-react";
 
 export const Dashboard = () => {
@@ -24,7 +24,7 @@ export const Dashboard = () => {
 
       <main className="container mx-auto px-4 py-8">
         <div className="h-[80vh]">
-          <CodeEditor />
+          {/* <CodeEditor /> */}
         </div>
       </main>
 
