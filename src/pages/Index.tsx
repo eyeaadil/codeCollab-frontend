@@ -1,14 +1,31 @@
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Code2, Users, Zap } from "lucide-react";
+import Header from "@/components/Header";
 
 const Index = () => {
+  const isAuthenticated = false; // Replace this with your actual authentication logic
+  const navigate = useNavigate();
+
+  const handleStartCoding = () => {
+    if (isAuthenticated) {
+      navigate("/dashboard"); // Navigate to the editor if authenticated
+    } else {
+      navigate("/signin"); // Redirect to login if not authenticated
+    }
+  };
+
   return (
     <div className="min-h-screen relative overflow-hidden bg-editor-bg">
+      {/* Header */}
+      {/* <Header /> */}
+
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-editor-accent/20 to-transparent rounded-full animate-spin-slow"></div>
         <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-to-tl from-editor-secondary/20 to-transparent rounded-full animate-spin-slow"></div>
+        <div className="absolute top-0 left-0 w-1/3 h-1/3 bg-gradient-radial from-editor-accent/30 to-transparent rounded-full filter blur-3xl animate-float"></div>
+        <div className="absolute bottom-0 right-0 w-1/3 h-1/3 bg-gradient-radial from-editor-secondary/30 to-transparent rounded-full filter blur-3xl animate-float" style={{ animationDelay: "-3s" }}></div>
       </div>
 
       {/* Main content */}
@@ -42,12 +59,14 @@ const Index = () => {
             transition={{ delay: 0.4, duration: 0.8 }}
             className="flex flex-wrap gap-6 justify-center"
           >
-            <Link
-              to="/dashboard"
+            <button
+              onClick={handleStartCoding}
               className="group relative px-8 py-4 bg-gradient-to-r from-editor-accent to-editor-secondary rounded-xl text-editor-bg font-semibold shadow-lg hover:shadow-editor-accent/50 transition-all duration-300"
             >
               Start Coding
-            </Link>
+            </button>
+
+            
           </motion.div>
         </motion.div>
 
