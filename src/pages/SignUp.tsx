@@ -1,24 +1,29 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 const SignUp = () => {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [error, setError] = useState(null);
   const navigate = useNavigate();
-
-
-  console.log(email, password, fullName, confirmPassword);
 
   const handleSignUp = async (e) => {
     e.preventDefault();
 
-    // Check if passwords match
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      toast.error("Passwords do not match", {
+        position: "top-center", // Set to middle of the screen
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+      });
       return;
     }
 
@@ -43,15 +48,47 @@ const SignUp = () => {
       const data = await response.json();
       console.log("Sign-up successful:", data);
 
-      // Navigate to sign-in page after successful registration
-      navigate("/signin");
+      // Show success toast notification
+      toast.success("Registration successful! Redirecting to Sign In...", {
+        position: "top-center", // Set to middle of the screen
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+      });
+
+      // Navigate to sign-in page after a delay
+      setTimeout(() => {
+        navigate("/signin");
+      }, 3000);
     } catch (err) {
-      setError(err.message);
+      toast.error(err.message, {
+        position: "top-center", // Set to middle of the screen
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+      });
     }
   };
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-editor-bg flex items-center justify-center">
+      <ToastContainer
+        position="top-center" // Center position
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+      />
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-editor-accent/20 to-transparent rounded-full animate-spin-slow"></div>
@@ -73,12 +110,6 @@ const SignUp = () => {
           <p className="text-center text-editor-text/80">
             Join us and start coding together!
           </p>
-
-          {error && (
-            <p className="text-center text-red-500">
-              {error}
-            </p>
-          )}
 
           <motion.form
             initial={{ opacity: 0 }}

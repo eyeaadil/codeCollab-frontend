@@ -1,57 +1,50 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { toast, ToastContainer } from "react-toastify";
+import 'react-toastify/dist/ReactToastify.css';
 
-const SignIn = () => {
+const SignIn = ({ setIsAuthenticated }) => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const navigate = useNavigate();
 
+  const handleSignIn = async (e) => {
+    e.preventDefault();
 
-    const[email, setEmail] = useState("");
-    const[password, setPassword] = useState("");
-    const [error, setError] = useState(null);
-    const navigate = useNavigate();
+    try {
+      const response = await fetch("http://localhost:8000/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to sign in");
+      }
 
-    console.log(email, password);
+      const data = await response.json();
+      console.log("Login successful:", data);
 
-    const handleSignIn = async (e) => {
-        e.preventDefault();
-    
-        try {
-          const response = await fetch("http://localhost:8000/auth/login", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ email, password }),
-          });
-    
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || "Failed to sign in");
-          }
-    
-          const data = await response.json();
-          console.log("Login successful:", data);
-    
+      // Store tokens in cookies
+      document.cookie = `access_token=${data.accessToken}; path=/; secure; samesite=strict`;
+      document.cookie = `refresh_token=${data.refreshToken}; path=/; secure; samesite=strict`;
 
+      // Set authentication state and navigate
+      setIsAuthenticated(true);
+      toast.success("Login successful! Redirecting...", { autoClose: 2000 });
+      setTimeout(() => navigate("/dashboard"), 2000);
+    } catch (err) {
+      toast.error(err.message || "An error occurred!", { autoClose: 3000 });
+    }
+  };
 
-           // Store tokens in cookies
-        document.cookie = `access_token=${data.accessToken}; path=/; secure; httponly`;
-        document.cookie = `refresh_token=${data.refreshToken}; path=/; secure; httponly`;
-
-          // Store tokens in localStorage or cookies (if needed)
-          // Example:
-          // localStorage.setItem("access_token", data.access_token);
-    
-          // Navigate to the dashboard or home page
-          navigate("/dashboard");
-        } catch (err) {
-          setError(err.message);
-        }
-      };
-   
   return (
     <div className="min-h-screen relative overflow-hidden bg-editor-bg flex items-center justify-center">
+      <ToastContainer position="top-center" />
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-editor-accent/20 to-transparent rounded-full animate-spin-slow"></div>
@@ -90,7 +83,6 @@ const SignIn = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-3 border border-editor-accent/20 rounded-lg bg-transparent text-editor-text focus:outline-none focus:ring-2 focus:ring-editor-accent placeholder-editor-text/60"
-
               />
               <span className="absolute top-1/2 right-3 transform -translate-y-1/2 text-editor-accent">
                 ✉️
