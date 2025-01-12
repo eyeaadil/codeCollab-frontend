@@ -1,13 +1,13 @@
 import { motion } from "framer-motion";
-// import { CodeEditor } from "./CodeEditor";
+import { CodeEditor } from "./CodeEditor";
 
 export const Dashboard = () => {
   return (
     <div className="min-h-screen bg-editor-bg text-editor-text">
       {/* Main content */}
-      <main className="container mx-auto px-4 py-32">
-        <div className="h-[80vh]">
-          {/* <CodeEditor /> */}
+      <main className=" px-4 py-[50px] w-full"> {/* Changed w-[90vw] to w-full */}
+        <div className="h-[80vh] w-full border:3px solid white"> {/* Changed w-[80vw] to w-full */}
+          <CodeEditor />
         </div>
       </main>
 

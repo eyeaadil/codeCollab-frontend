@@ -21,15 +21,15 @@ const Header = ({ isAuthenticated, setIsAuthenticated }) => {
       });
 
       console.log("addddddddiiiiiiiiiiiiill", response);
-      // if (!response.ok) {
-      //   throw new Error("Failed to log out from the server.");
-      // }
+      if (!response.ok) {
+        throw new Error("Failed to log out from the server.");
+      }
 
       // Clear client-side authentication state
-      // setIsAuthenticated(false);
+      setIsAuthenticated(false);
 
       // Redirect to the home page or login page
-      // navigate("/");
+      navigate("/");
     } catch (error) {
       console.error("Logout failed:", error);
       // Optionally, show an error message to the user
@@ -86,17 +86,18 @@ const Header = ({ isAuthenticated, setIsAuthenticated }) => {
               {/* Dropdown Menu */}
               {isDropdownVisible && (
                 <div
-                  className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-2"
-                  onMouseLeave={closeDropdown} // Optional: Close when mouse leaves the dropdown
+                  className="absolute right-0 mt-2 w-48 bg-editor-bg rounded-md shadow-lg py-2 max-h-[200px] overflow-y-auto z-50"
+                  onMouseLeave={closeDropdown}
                 >
-                  
                   <Link
                     to="/profile"
-                    className="block px-4 py-2 text-editor-text hover:bg-editor-bg hover:text-editor-accent"
+                    className="block px-4 py-1 text-editor-text hover:bg-editor-accent hover:text-editor-bg"
                   >
                     User Profile
                   </Link>
-                  <button onClick={handleLogout} className="block w-full text-left px-4 py-2 text-editor-text hover:bg-editor-bg hover:text-editor-accent"
+                  <button
+                    onClick={handleLogout}
+                    className="block w-full text-left px-4 py-2 text-editor-text hover:bg-editor-accent hover:text-editor-bg"
                   >
                     Logout
                   </button>
