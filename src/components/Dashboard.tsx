@@ -1,5 +1,8 @@
 import { motion } from "framer-motion";
 import { CodeEditor } from "./CodeEditor";
+// import FileExplorer from "./CodeEditor";
+// import { FileExplorer } from "./CodeEditor";
+
 
 export const Dashboard = () => {
   return (
@@ -7,6 +10,7 @@ export const Dashboard = () => {
       {/* Main content */}
       <main className=" px-4 py-[50px] w-full"> {/* Changed w-[90vw] to w-full */}
         <div className="h-[80vh] w-full border:3px solid white"> {/* Changed w-[80vw] to w-full */}
+          {/* <FileExplorer /> */}
           <CodeEditor />
         </div>
       </main>

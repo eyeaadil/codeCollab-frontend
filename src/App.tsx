@@ -9,7 +9,7 @@ import { Dashboard } from "./components/Dashboard";
 import SignIn from "./pages/SignIn";
 import SignUp from "./pages/SignUp";
 import Header from "./components/Header";
-
+// import FileExplorer from "./components/CodeEditor";
 const queryClient = new QueryClient();
 
 const App = () => {
@@ -25,6 +25,8 @@ const App = () => {
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            {/* <Route path="/dashboard/test" element={<FileExplorer/>} /> */}
+
             <Route path="/signin" element={<SignIn setIsAuthenticated={setIsAuthenticated} />} />
             <Route path="/signup" element={<SignUp />} />
           </Routes>
