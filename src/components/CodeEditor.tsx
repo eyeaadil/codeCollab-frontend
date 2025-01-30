@@ -100,14 +100,14 @@ export const CodeEditor = () => {
       const path = folderPath.split("/").filter(Boolean);
       const updatedStructure = { ...fileStructure };
       const targetFolder = path[0];
-      
+
       if (updatedStructure[targetFolder]) {
         updatedStructure[targetFolder] = updateFileStructure(
           updatedStructure[targetFolder],
           path.slice(1)
         );
       }
-      
+
       setFileStructure(updatedStructure);
     }
   };
@@ -146,9 +146,9 @@ export const CodeEditor = () => {
   const handleCloseFile = (fileName) => {
     setOpenFiles((files) => {
       const remainingFiles = files.filter((file) => file.name !== fileName);
-  
+
       const closedFileIndex = files.findIndex((file) => file.name === fileName);
-  
+
       let nextFile = null;
       if (remainingFiles.length > 0) {
         if (closedFileIndex > 0) {
@@ -157,10 +157,10 @@ export const CodeEditor = () => {
           nextFile = remainingFiles[0];
         }
       }
-  
+
       setActiveFile(nextFile ? nextFile.name : null);
       setCode(nextFile ? nextFile.content : "// Start coding here...");
-  
+
       return remainingFiles;
     });
   };
@@ -174,9 +174,8 @@ export const CodeEditor = () => {
       return (
         <div key={key} className="relative">
           <div
-            className={`p-2 text-white cursor-pointer hover:bg-gray-700 rounded ${
-              activeFile === file.name ? "bg-gray-600" : ""
-            } ${selectedFolder === currentPath ? "bg-blue-600" : ""}`}
+            className={`p-2 text-white cursor-pointer hover:bg-gray-700 rounded ${activeFile === file.name ? "bg-gray-600" : ""
+              } ${selectedFolder === currentPath ? "bg-blue-600" : ""}`}
             onClick={(e) => {
               if (file.type === "folder") {
                 toggleFolder(currentPath, e);
@@ -349,9 +348,8 @@ export const CodeEditor = () => {
           {openFiles.map((file) => (
             <div
               key={file.name}
-              className={`px-3 py-1 rounded flex items-center gap-2 ${
-                activeFile === file.name ? "bg-gray-700" : ""
-              }`}
+              className={`px-3 py-1 rounded flex items-center gap-2 ${activeFile === file.name ? "bg-gray-700" : ""
+                }`}
               onClick={() => {
                 setActiveFile(file.name);
                 setCode(file.content);

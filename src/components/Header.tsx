@@ -12,9 +12,9 @@ const Header = ({ isAuthenticated, setIsAuthenticated }) => {
       // Call the backend logout controller
 
       console.log("login initiated");
-      const response = await fetch("http://localhost:8000/auth/logout", {
+      const response = await fetch("http://localhost:5000/api/auth/logout", {
         method: "POST",
-        credentials: "include", // Ensure cookies are sent with the request
+        // credentials: "include", // Ensure cookies are sent with the request
         headers: {
           "Content-Type": "application/json",
         },

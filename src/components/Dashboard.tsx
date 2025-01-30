@@ -1,17 +1,23 @@
 import { motion } from "framer-motion";
 import { CodeEditor } from "./CodeEditor";
+// import FileExplorer from "./FileExplorer";
 // import FileExplorer from "./CodeEditor";
 // import { FileExplorer } from "./CodeEditor";
 
-
+// import { FolderList } from "./FolderList";
+import FileList from "./FileList";
+import FolderList from "./FolderList";
+import FileExplorer from "./FileExplorer";
 export const Dashboard = () => {
   return (
     <div className="min-h-screen bg-editor-bg text-editor-text">
       {/* Main content */}
       <main className=" px-4 py-[50px] w-full"> {/* Changed w-[90vw] to w-full */}
         <div className="h-[80vh] w-full border:3px solid white"> {/* Changed w-[80vw] to w-full */}
-          {/* <FileExplorer /> */}
-          <CodeEditor />
+          <FileExplorer />
+          {/* <CodeEditor /> */}
+          {/* <FolderList /> */}
+          {/* <FileList /> */}
         </div>
       </main>
 

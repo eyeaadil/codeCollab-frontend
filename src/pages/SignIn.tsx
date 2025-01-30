@@ -13,8 +13,9 @@ const SignIn = ({ setIsAuthenticated }) => {
     e.preventDefault();
 
     try {
-      const response = await fetch("http://localhost:8000/auth/login", {
+      const response = await fetch("http://localhost:5000/api/auth/login", {
         method: "POST",
+        credentials: 'include',
         headers: {
           "Content-Type": "application/json",
         },
@@ -30,8 +31,8 @@ const SignIn = ({ setIsAuthenticated }) => {
       console.log("Login successful:", data);
 
       // Store tokens in cookies
-      document.cookie = `access_token=${data.accessToken}; path=/; secure; samesite=strict`;
-      document.cookie = `refresh_token=${data.refreshToken}; path=/; secure; samesite=strict`;
+      // document.cookie = `access_token=${data.accessToken}; path=/; samesite=strict`;
+      // document.cookie = `refresh_token=${data.refreshToken}; path=/; samesite=strict`;
 
       // Set authentication state and navigate
       setIsAuthenticated(true);
