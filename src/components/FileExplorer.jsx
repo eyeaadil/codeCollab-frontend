@@ -22,6 +22,9 @@ const FileExplorer = () => {
   const [newFolderName, setNewFolderName] = useState('');
   const [creatingFile, setCreatingFile] = useState(false);
   const [creatingFolder, setCreatingFolder] = useState(false);
+  const [selectedFolderId, setSelectedFolderId] = useState(null);
+  const [creatingFileParentId, setCreatingFileParentId] = useState(null);
+  const [creatingFolderParentId, setCreatingFolderParentId] = useState(null);
 
   useEffect(() => {
     dispatch(fetchFiles());
@@ -60,52 +63,97 @@ const FileExplorer = () => {
   const getUnassignedFiles = () => files.files?.filter(file => !file.folder) || [];
 
   const handleNewFile = () => {
+    const parentId = selectedFolderId || null;
+    if (parentId) {
+      setExpandedFolders(prev => new Set(prev).add(parentId));
+    }
+    setCreatingFileParentId(parentId);
     setCreatingFile(true);
+    setNewFileName('');
+    setCreatingFolder(false);
   };
 
   const handleNewFolder = () => {
+    const parentId = selectedFolderId || null;
+    if (parentId) {
+      setExpandedFolders(prev => new Set(prev).add(parentId));
+    }
+    setCreatingFolderParentId(parentId);
     setCreatingFolder(true);
+    setNewFolderName('');
+    setCreatingFile(false);
   };
 
   const handleCreateFile = (e) => {
     if (newFileName && e.key === 'Enter') {
-      // Dispatch an action to create the new file
-      // dispatch(createFile({ name: newFileName }));
+      // Dispatch createFile with folder: creatingFileParentId
+      // dispatch(createFile({ name: newFileName, folder: creatingFileParentId }));
       setCreatingFile(false);
+      setCreatingFileParentId(null);
       setNewFileName('');
     }
   };
 
   const handleCreateFolder = (e) => {
     if (newFolderName && e.key === 'Enter') {
-      // Dispatch an action to create the new folder
-      // dispatch(createFolder({ name: newFolderName }));
+      // Dispatch createFolder with parent: creatingFolderParentId
+      // dispatch(createFolder({ name: newFolderName, parent: creatingFolderParentId }));
       setCreatingFolder(false);
+      setCreatingFolderParentId(null);
       setNewFolderName('');
     }
   };
 
+  const handleMouseDown = (e) => {
+    setIsDragging(true);
+    setStartX(e.clientX);
+    setStartWidth(sidebarWidth);
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
+    const newWidth = startWidth + (e.clientX - startX);
+    setSidebarWidth(Math.max(200, Math.min(newWidth, 500)));
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  useEffect(() => {
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
+
   return (
-    <div className="h-screen flex bg-[#1e1e1e] text-white" style={{border:'solid black', height: '110%', width: '100%'}}>
+    <div className="h-screen flex bg-[#1e1e1e] text-white" style={{ height: '110%', width: '100%' }}>
       {/* Sidebar */}
       <div
         className="relative flex-none h-full bg-[#1f1f1f] border-r border-[#2d2d2d]"
-        style={{ width: `${sidebarWidth}px`, border: '1px solid white' }}
+        style={{ width: `${sidebarWidth}px` }}
       >
+        <div
+          className="absolute right-0 top-0 w-1 h-full cursor-col-resize hover:bg-blue-500"
+          onMouseDown={handleMouseDown}
+        />
         {/* Explorer Header */}
-        <div className="h-12 px-4 flex items-center text-sm font-medium text-gray-400 border-b border-[#2d2d2d] bg-[#1f1f1f]" style={{border: '1px solid yellow'}}>
+        <div className="h-12 px-4 flex items-center text-sm font-medium text-gray-400 border-b border-[#2d2d2d] bg-[#1f1f1f]">
           EXPLORER
           <button
             className="ml-4 p-2 bg-blue-500 rounded text-white"
             onClick={handleNewFile}
           >
-            <Plus size={16} className="mr-2" /> 
+            <Plus size={16} />
           </button>
           <button
             className="ml-2 p-2 bg-green-500 rounded text-white"
             onClick={handleNewFolder}
           >
-            <Plus size={16} className="mr-2" /> 
+            <Plus size={16} />
           </button>
         </div>
 
@@ -113,13 +161,33 @@ const FileExplorer = () => {
         <div className="h-[calc(100%-48px)] overflow-y-auto sidebar-content p-2">
           {folders.map(folder => (
             <div key={folder._id} className="mb-1">
-              <div
-                className="flex items-center rounded px-2 py-1 cursor-pointer hover:bg-[#2a2a2a] transition-colors duration-150"
-                onClick={() => toggleFolder(folder._id)}
+              <div 
+                className={`flex items-center rounded px-2 py-1 cursor-pointer transition-colors duration-150 
+                  ${selectedFolderId === folder._id 
+                    ? 'bg-blue-600/30 hover:bg-blue-600/40' 
+                    : 'hover:bg-[#2a2a2a]'
+                  }`}
               >
-                {expandedFolders.has(folder._id) ? <ChevronDown size={16} className="mr-1 text-gray-400" /> : <ChevronRight size={16} className="mr-1 text-gray-400" />}
-                <Folder size={16} className="mr-2 text-blue-400" />
-                <span className="text-gray-300 truncate">{folder.name}</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleFolder(folder._id);
+                  }}
+                  className="mr-1"
+                >
+                  {expandedFolders.has(folder._id) ? (
+                    <ChevronDown size={16} className="text-gray-400" />
+                  ) : (
+                    <ChevronRight size={16} className="text-gray-400" />
+                  )}
+                </button>
+                <div
+                  className="flex items-center flex-grow"
+                  onClick={() => setSelectedFolderId(folder._id)}
+                >
+                  <Folder size={16} className="mr-2 text-blue-400" />
+                  <span className="text-gray-300 truncate">{folder.name}</span>
+                </div>
               </div>
               {expandedFolders.has(folder._id) && (
                 <div className="ml-4">
@@ -133,11 +201,58 @@ const FileExplorer = () => {
                       <span className="truncate">{file.name}</span>
                     </div>
                   ))}
+                  {creatingFolder && creatingFolderParentId === folder._id && (
+                    <div className="mt-1 ml-2">
+                      <input
+                        type="text"
+                        value={newFolderName}
+                        onChange={(e) => setNewFolderName(e.target.value)}
+                        onKeyDown={handleCreateFolder}
+                        placeholder="Enter folder name"
+                        className="border border-blue-500 p-1 rounded bg-[#3a3a4a] text-white w-full 
+                          placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        autoFocus
+                      />
+                    </div>
+                  )}
+                  {creatingFile && creatingFileParentId === folder._id && (
+                    <div className="mt-1 ml-2">
+                      <input
+                        type="text"
+                        value={newFileName}
+                        onChange={(e) => setNewFileName(e.target.value)}
+                        onKeyDown={handleCreateFile}
+                        placeholder="Enter file name"
+                        className="border border-green-500 p-1 rounded bg-[#3a3a4a] text-white w-full 
+                          placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
+                        autoFocus
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           ))}
 
+          {/* New Folder at Root */}
+          {creatingFolder && creatingFolderParentId === null && (
+            <div className="mb-1">
+              <div className="flex items-center rounded px-2 py-1">
+                <input
+                  type="text"
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={handleCreateFolder}
+                  placeholder="Enter folder name"
+                  className="border border-blue-500 p-1 rounded bg-[#3a3a4a] text-white w-full 
+                    placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  autoFocus
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Unassigned Files and New File at Root */}
           {getUnassignedFiles().map(file => (
             <div
               key={file._id}
@@ -149,16 +264,17 @@ const FileExplorer = () => {
             </div>
           ))}
 
-          {/* Create New File/Folder Input */}
-          {(creatingFile || creatingFolder) && (
-            <div className="mt-4 pl-4">
+          {creatingFile && creatingFileParentId === null && (
+            <div className="flex items-center rounded px-2 py-1">
               <input
                 type="text"
-                value={creatingFile ? newFileName : newFolderName}
-                onChange={(e) => creatingFile ? setNewFileName(e.target.value) : setNewFolderName(e.target.value)}
-                onKeyDown={creatingFile ? handleCreateFile : handleCreateFolder}
-                placeholder={creatingFile ? "Enter file name" : "Enter folder name"}
-                className="border p-2 rounded mb-4 bg-[#2a2a2a] text-white w-full"
+                value={newFileName}
+                onChange={(e) => setNewFileName(e.target.value)}
+                onKeyDown={handleCreateFile}
+                placeholder="Enter file name"
+                className="border border-green-500 p-1 rounded bg-[#3a3a4a] text-white w-full 
+                  placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
+                autoFocus
               />
             </div>
           )}
@@ -166,7 +282,7 @@ const FileExplorer = () => {
       </div>
 
       {/* Main Editor Area */}
-      <div className="flex-1 flex flex-col h-full relative" style={{backgroundColor: "green"}} >
+      <div className="flex-1 flex flex-col h-full relative">
         {/* Open Files Header */}
         {openedFiles.length > 0 && (
           <div className="h-10 flex items-center border-b border-[#2d2d2d] bg-[#1f1f1f] overflow-x-auto">
@@ -193,7 +309,7 @@ const FileExplorer = () => {
         )}
 
         {/* Code Editor */}
-        <div className="flex-1  relative" style={{backgroundColor:"yellow "}} >
+        <div className="flex-1 relative">
           {activeFile ? (
             <Editor
               height="100%"
