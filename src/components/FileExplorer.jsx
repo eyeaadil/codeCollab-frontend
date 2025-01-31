@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchFiles } from '../store/fileSlice';
-import { fetchFolders } from '../store/folderSlice';
+import { fetchFiles , createFile } from '../store/fileSlice';
+import { fetchFolders, createFolder} from '../store/folderSlice';
 import { ChevronRight, ChevronDown, File, Folder, X, Plus } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 
@@ -87,7 +87,7 @@ const FileExplorer = () => {
   const handleCreateFile = (e) => {
     if (newFileName && e.key === 'Enter') {
       // Dispatch createFile with folder: creatingFileParentId
-      // dispatch(createFile({ name: newFileName, folder: creatingFileParentId }));
+      dispatch(createFile({ name: newFileName, folder: creatingFileParentId }));
       setCreatingFile(false);
       setCreatingFileParentId(null);
       setNewFileName('');
@@ -97,7 +97,7 @@ const FileExplorer = () => {
   const handleCreateFolder = (e) => {
     if (newFolderName && e.key === 'Enter') {
       // Dispatch createFolder with parent: creatingFolderParentId
-      // dispatch(createFolder({ name: newFolderName, parent: creatingFolderParentId }));
+      dispatch(createFolder({ name: newFolderName, parentFolder: creatingFolderParentId }));
       setCreatingFolder(false);
       setCreatingFolderParentId(null);
       setNewFolderName('');

@@ -11,7 +11,7 @@ export const fetchFolders = createAsyncThunk('folder/fetchFolders', async () => 
 
 // Async thunk to create a folder
 export const createFolder = createAsyncThunk('folder/createFolder', async (folderData) => {
-  const response = await axios.post('http://localhost:5000/api/folders', folderData, {
+  const response = await axios.post('http://localhost:5000/api/folders/folders', folderData, {
     withCredentials: true, // For sending cookies
   });
   return response.data; // Return the newly created folder
