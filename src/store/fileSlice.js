@@ -13,6 +13,9 @@ export const fetchFiles = createAsyncThunk('file/fetchFiles', async () => {
 export const createFile = createAsyncThunk('file/createFile', async (fileData) => {
   const response = await axios.post('http://localhost:5000/api/files', fileData, {
     withCredentials: true, // For sending cookies
+    headers: {
+      'Content-Type': 'application/json'
+    }
   });
   return response.data; // Return the newly created file
 });
