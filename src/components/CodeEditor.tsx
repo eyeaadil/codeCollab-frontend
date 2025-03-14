@@ -1,101 +1,64 @@
 import { useEffect, useState, useRef } from "react";
 import Editor from "@monaco-editor/react";
-import { FolderPlus, FileText, X, ChevronRight, ChevronDown, Menu } from "lucide-react";
+import { X, Users } from "lucide-react";
 
 export const CodeEditor = () => {
-  const [fileStructure, setFileStructure] = useState(() => {
-    const savedStructure = localStorage.getItem("fileStructure");
-    return savedStructure ? JSON.parse(savedStructure) : {
-      "index.js": { name: "index.js", type: "file", content: "// Start coding here..." },
-      "README.md": { name: "README.md", type: "file", content: "# My Project\n\nWelcome to my coding project!" },
-      src: {
-        name: "src",
-        type: "folder",
-        children: [
-          { name: "App.js", type: "file", content: "// React component" },
-          { name: "styles.css", type: "file", content: "/* CSS styles */" },
-        ],
-      },
-    };
-  });
+  // Editor state
+  const [code, setCode] = useState("// Start coding here...");
+  const [activeRoom, setActiveRoom] = useState(null);
+  const [roomId, setRoomId] = useState(null);
 
-  const [openFiles, setOpenFiles] = useState(() => {
-    const savedOpenFiles = localStorage.getItem("openFiles");
-    return savedOpenFiles ? JSON.parse(savedOpenFiles) : [];
-  });
+  // Collaboration state
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [collaboratorEmail, setCollaboratorEmail] = useState("");
+  const [collaborators, setCollaborators] = useState([]);
+  const [pendingInvites, setPendingInvites] = useState<string[]>([]);
 
-  const [activeFile, setActiveFile] = useState(() => {
-    return localStorage.getItem("activeFile") || null;
-  });
-
-  const wsRef = useRef<WebSocket | null>(null);
+  // WebSocket state from tanzu
+  const wsRef = useRef(null);
   const [wsStatus, setWsStatus] = useState("disconnected");
-  const [code, setCode] = useState("");
-  
-  // Message queue for storing messages when WebSocket is not ready
-  const messageQueueRef = useRef<Array<any>>([]);
+  const messageQueueRef = useRef([]);
   const reconnectAttemptRef = useRef(0);
   const maxReconnectAttempts = 5;
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef(null);
   const isConnectingRef = useRef(false);
-  
-  // Debounce mechanism for editor changes
-  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastContentRef = useRef<string>("");
-  const editorInstanceRef = useRef(null);
+  const debounceTimeoutRef = useRef(null);
+  const lastContentRef = useRef("");
   const clientIdRef = useRef(`client-${Math.random().toString(36).substring(2, 9)}`);
-  
-  // Track if changes are coming from the network to avoid echo
   const receivingExternalChangesRef = useRef(false);
-  
-  // Function to establish WebSocket connection with better error handling
+
   const connectWebSocket = () => {
-    // Prevent multiple connection attempts
-    if (isConnectingRef.current) {
-      return;
-    }
-    
+    if (isConnectingRef.current) return;
+
     isConnectingRef.current = true;
-    console.log('Establishing WebSocket connection...');
     setWsStatus("connecting");
-    
-    // Close existing connection if it exists
+
     if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
-      try {
-        wsRef.current.close();
-      } catch (e) {
-        console.error('Error closing existing WebSocket:', e);
-      }
+      wsRef.current.close();
     }
-    
+
     try {
-      // Create new WebSocket with error handling
-      const socket = new WebSocket('ws://localhost:4000');
+      const socket = new WebSocket("ws://localhost:4000");
+      console.log("Attempting to connect to WebSocket at ws://localhost:4000");
+console.log("Attempting to connect to WebSocket at ws://localhost:4000");
       wsRef.current = socket;
 
-      // Setup event handlers
       socket.onopen = () => {
-        console.log('WebSocket connection established');
         setWsStatus("connected");
         reconnectAttemptRef.current = 0;
         isConnectingRef.current = false;
-        
-        // Process any queued messages
         processQueue();
-        
-        // Notify the server about the active file to get the latest content
-        if (activeFile) {
-          socket.send(JSON.stringify({ 
-            type: 'join', 
-            fileName: activeFile,
-            clientId: clientIdRef.current
-          }));
-          
-          // Also request current content
+
+        if (roomId) {
           socket.send(JSON.stringify({
-            type: 'getContent',
-            fileName: activeFile,
-            clientId: clientIdRef.current
+            type: "join",
+            roomId: roomId,
+            clientId: clientIdRef.current,
+          }));
+          socket.send(JSON.stringify({
+            type: "getContent",
+            roomId: roomId,
+            clientId: clientIdRef.current,
           }));
         }
       };
@@ -103,350 +66,238 @@ export const CodeEditor = () => {
       socket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          console.log('Received message:', data);
-          
-          if (data.type === 'update' && data.fileName && data.content) {
-            if (activeFile === data.fileName) {
-              console.log('Updating code with received content');
-              // Skip if this update is our own
-              if (data.clientId === clientIdRef.current) {
-                console.log('Skipping our own update');
-                return;
-              }
-              
-              // Prevent echo by marking we're receiving external changes
-              receivingExternalChangesRef.current = true;
-              
-              setCode(data.content);
-              lastContentRef.current = data.content;
-              
-              // Also update the open files to keep everything in sync
-              setOpenFiles((files) => {
-                const fileExists = files.some(file => file.name === data.fileName);
-                
-                if (fileExists) {
-                  return files.map((file) =>
-                    file.name === data.fileName ? { ...file, content: data.content } : file
-                  );
-                } else {
-                  // Add file if it doesn't exist
-                  return [...files, { name: data.fileName, content: data.content }];
-                }
-              });
-              
-              // Reset the receiving flag after a short delay
-              setTimeout(() => {
-                receivingExternalChangesRef.current = false;
-              }, 100);
-            }
+          console.log("Received message:", data);
+
+          if (data.type === "update" && data.roomId === roomId) {
+            if (data.clientId === clientIdRef.current) return;
+
+            receivingExternalChangesRef.current = true;
+            setCode(data.content);
+            lastContentRef.current = data.content;
+            setTimeout(() => {
+              receivingExternalChangesRef.current = false;
+            }, 100);
+          } else if (data.type === "collaborators") {
+            setCollaborators(data.collaborators);
+            setPendingInvites(data.invitedEmails || []);
+          } else if (data.type === "invite") {
+            setPendingInvites(prev => [...prev, data.email]);
           }
         } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
+          console.error("Error parsing WebSocket message:", error);
         }
       };
 
       socket.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        console.error("WebSocket error:", error);
         setWsStatus("error");
-        // Let onclose handle reconnection
       };
 
       socket.onclose = (event) => {
-        console.log('WebSocket connection closed', event);
         setWsStatus("disconnected");
         wsRef.current = null;
         isConnectingRef.current = false;
-        
-        // Don't try to reconnect if closed normally
-        if (event.wasClean) {
-          console.log('Clean WebSocket closure, not reconnecting');
-          return;
-        }
-        
-        // Attempt to reconnect if we haven't exceeded max attempts
+
+        if (event.wasClean) return;
+
         if (reconnectAttemptRef.current < maxReconnectAttempts) {
-          const delay = Math.min(1000 * Math.pow(1.5, reconnectAttemptRef.current), 10000);
-          console.log(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttemptRef.current + 1}/${maxReconnectAttempts})`);
-          
-          if (reconnectTimeoutRef.current) {
-            clearTimeout(reconnectTimeoutRef.current);
-          }
-          
+          const delay = Math.min(
+            1000 * Math.pow(1.5, reconnectAttemptRef.current),
+            10000
+          );
           reconnectTimeoutRef.current = setTimeout(() => {
             reconnectAttemptRef.current += 1;
             connectWebSocket();
           }, delay);
         } else {
-          console.log('Maximum reconnection attempts reached');
           setWsStatus("failed");
         }
       };
     } catch (error) {
-      console.error('Error creating WebSocket connection:', error);
+      console.error("Error creating WebSocket:", error);
       setWsStatus("error");
       isConnectingRef.current = false;
-      
-      // Schedule reconnect
-      if (reconnectAttemptRef.current < maxReconnectAttempts) {
-        const delay = Math.min(1000 * Math.pow(1.5, reconnectAttemptRef.current), 10000);
-        if (reconnectTimeoutRef.current) {
-          clearTimeout(reconnectTimeoutRef.current);
-        }
-        
-        reconnectTimeoutRef.current = setTimeout(() => {
-          reconnectAttemptRef.current += 1;
-          connectWebSocket();
-        }, delay);
-      }
     }
   };
 
-  // Function to process the message queue
   const processQueue = () => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      console.log('Cannot process queue: WebSocket not open');
-      return;
-    }
-    
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
     if (messageQueueRef.current.length > 0) {
-      console.log(`Processing ${messageQueueRef.current.length} queued messages`);
       const messagesToProcess = [...messageQueueRef.current];
       messageQueueRef.current = [];
-      
-      // Only send the latest message for each file to avoid overwhelming the server
+
       const latestMessages = new Map();
       for (const msg of messagesToProcess) {
-        if (msg.type === 'update') {
-          latestMessages.set(msg.fileName, msg);
+        if (msg.type === "update") {
+          latestMessages.set(msg.roomId, msg);
         } else {
-          // For non-update messages, always process them
-          try {
-            wsRef.current.send(JSON.stringify(msg));
-          } catch (error) {
-            console.error('Error sending queued message:', error);
-            messageQueueRef.current.push(msg);
-          }
+          wsRef.current.send(JSON.stringify(msg));
         }
       }
-      
-      // Send the latest update for each file
+
       for (const msg of latestMessages.values()) {
-        try {
-          wsRef.current.send(JSON.stringify(msg));
-          console.log('Sent queued message for:', msg.fileName);
-        } catch (error) {
-          console.error('Error sending queued message:', error);
-          messageQueueRef.current.push(msg);
-        }
+        wsRef.current.send(JSON.stringify(msg));
       }
     }
   };
 
-  // Function to safely send messages with queueing and aggregation
-  const sendMessage = (message: any) => {
-    // Add clientId to identify this client
+  const sendMessage = (message) => {
     const messageWithId = {
       ...message,
-      clientId: clientIdRef.current
+      clientId: clientIdRef.current,
     };
-    
-    // For update messages, check for duplicate content
-    if (message.type === 'update') {
-      if (lastContentRef.current === message.content) {
-        return false;
-      }
-      lastContentRef.current = message.content;
+
+    if (message.type === "update" && lastContentRef.current === message.content) {
+      return false;
     }
-    
+    lastContentRef.current = message.content;
+
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      try {
-        wsRef.current.send(JSON.stringify(messageWithId));
-        console.log('Sent WebSocket message:', message.type, message.fileName);
-        return true;
-      } catch (error) {
-        console.error('Error sending message:', error);
-        messageQueueRef.current.push(messageWithId);
-        
-        // Try to reconnect if sending fails
-        if (wsRef.current.readyState !== WebSocket.OPEN) {
-          reconnectIfNeeded();
-        }
-        return false;
-      }
+      wsRef.current.send(JSON.stringify(messageWithId));
+      return true;
     } else {
-      console.log(`WebSocket not ready. State: ${wsRef.current?.readyState}. Queueing message.`);
-      
-      // For updates, filter out older messages for the same file before adding the new one
-      if (message.type === 'update') {
+      if (message.type === "update") {
         messageQueueRef.current = messageQueueRef.current.filter(
-          msg => !(msg.type === 'update' && msg.fileName === message.fileName)
+          (msg) => !(msg.type === "update" && msg.roomId === message.roomId)
         );
       }
-      
       messageQueueRef.current.push(messageWithId);
-      
-      // Try to reconnect if not already connecting
       reconnectIfNeeded();
       return false;
     }
   };
-  // Helper function to trigger reconnection if needed
+
   const reconnectIfNeeded = () => {
-    if (!isConnectingRef.current && (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED)) {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-      
-      // Schedule immediate reconnect
-      setTimeout(() => {
-        connectWebSocket();
-      }, 100);
+    if (
+      !isConnectingRef.current &&
+      (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED)
+    ) {
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      setTimeout(() => connectWebSocket(), 100);
     }
   };
 
-  // Initialize WebSocket connection
+  // Initialize WebSocket
   useEffect(() => {
     connectWebSocket();
-    
-    // Cleanup function
     return () => {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      
-      if (debounceTimeoutRef.current) {
-        clearTimeout(debounceTimeoutRef.current);
-      }
-      
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
+      if (wsRef.current) wsRef.current.close();
     };
   }, []);
-  
-  // Handle active file changes
+
+  // Handle room joining
   useEffect(() => {
-    if (activeFile) {
-      // Load file content from openFiles
-      const file = openFiles.find(f => f.name === activeFile);
-      if (file) {
-        setCode(file.content);
-        lastContentRef.current = file.content;
-      }
-      
-      // Subscribe to updates for this file
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        // Notify server about file change to join that file's updates
-        sendMessage({ 
-          type: 'join', 
-          fileName: activeFile 
-        });
-        
-        // Request current content
+    if (roomId && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      sendMessage({ type: "join", roomId: roomId });
+      sendMessage({ type: "getContent", roomId: roomId });
+    }
+  }, [roomId]);
+
+  // Handle editor changes
+  const handleEditorChange = (value = "") => {
+    if (receivingExternalChangesRef.current) return;
+
+    setCode(value);
+    if (roomId) {
+      if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
+      debounceTimeoutRef.current = setTimeout(() => {
         sendMessage({
-          type: 'getContent',
-          fileName: activeFile
+          type: "update",
+          roomId: roomId,
+          content: value,
         });
-      }
+      }, 300);
     }
-  }, [activeFile]);
-
-  // Load active file content
-  useEffect(() => {
-    const activeFileName = localStorage.getItem("activeFile");
-    if (activeFileName) {
-      setActiveFile(activeFileName);
-      const file = openFiles.find(f => f.name === activeFileName);
-      if (file) {
-        const newContent = file.content;
-        setCode(newContent);
-        lastContentRef.current = newContent;
-      }
-    }
-  }, []);
-
-  // Save open files to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem("openFiles", JSON.stringify(openFiles));
-  }, [openFiles]);
-
-  // Save active file to localStorage whenever it changes
-  useEffect(() => {
-    if (activeFile) {
-      localStorage.setItem("activeFile", activeFile);
-    }
-  }, [activeFile]);
-
-  // Handle editor mount
-  const handleEditorDidMount = (editor, monaco) => {
-    editorInstanceRef.current = editor;
   };
 
-  // Debounced editor content change handler
-  const handleEditorChange = (value = "") => {
-    // Skip if this change is from an external source
-    if (receivingExternalChangesRef.current) {
-      console.log('Skipping local update due to external changes');
-      return;
-    }
-    
-    setCode(value);
-    
-    if (activeFile) {
-      // Update local state immediately
-      setOpenFiles((files) => {
-        const fileExists = files.some(file => file.name === activeFile);
-        
-        if (fileExists) {
-          return files.map((file) =>
-            file.name === activeFile ? { ...file, content: value } : file
-          );
-        } else {
-          // Add file if it doesn't exist
-          return [...files, { name: activeFile, content: value }];
-        }
+  // Create or join a room
+  const handleCreateRoom = () => {
+    const newRoomId = `room-${Math.random().toString(36).substring(2, 9)}`;
+    setRoomId(newRoomId);
+    setActiveRoom(newRoomId);
+    setShowInviteModal(true);
+  };
+
+  // Send collaboration invite
+  const handleSendInvite = async () => {
+    if (!collaboratorEmail.trim() || !roomId) return;
+
+    try {
+      // Send invite via WebSocket
+      const inviteSent = sendMessage({
+        type: "invite",
+        roomId: roomId,
+        email: collaboratorEmail
       });
 
-      // Debounce network sends to avoid overwhelming the connection
-      if (debounceTimeoutRef.current) {
-        clearTimeout(debounceTimeoutRef.current);
+      if (!inviteSent) {
+        throw new Error("Failed to send invite via WebSocket");
       }
-      
-      debounceTimeoutRef.current = setTimeout(() => {
-        // Send to server if connected, or queue if not
-        sendMessage({
-          type: 'update',
-          fileName: activeFile,
-          content: value
-        });
-      }, 300); // 300ms debounce
+
+      // Send email invitation
+      const response = await fetch("/api/collaborate/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          senderId: clientIdRef.current,
+          receiverEmail: collaboratorEmail,
+          roomId: roomId
+        }),
+      });
+
+      if (response.ok) {
+        alert(`Invitation sent to ${collaboratorEmail}`);
+        setCollaboratorEmail("");
+        setShowInviteModal(false);
+      } else {
+        throw new Error("Failed to send email invite");
+      }
+    } catch (error) {
+      console.error("Error sending invite:", error);
+      alert("Failed to send invitation. Please try again.");
     }
   };
 
   return (
-    <div className="editor-container">
+    <div className="h-screen w-full flex flex-col bg-gray-900 text-white relative">
+      {/* WebSocket Status */}
       {wsStatus !== "connected" && (
-        <div className={`websocket-status ${wsStatus}`} style={{
-          padding: "6px 12px",
-          backgroundColor: wsStatus === "connecting" ? "#ffd700" : 
-                          wsStatus === "error" || wsStatus === "failed" ? "#ff6b6b" : "#f8f9fa",
-          color: wsStatus === "connecting" ? "#333" : 
-                wsStatus === "error" || wsStatus === "failed" ? "white" : "#333",
-          position: "absolute",
-          top: "10px",
-          right: "10px",
-          zIndex: 100,
-          borderRadius: "4px",
-          boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
-          display: "flex",
-          alignItems: "center",
-          gap: "8px"
-        }}>
+        <div
+          className={`websocket-status ${wsStatus}`}
+          style={{
+            padding: "6px 12px",
+            backgroundColor:
+              wsStatus === "connecting"
+                ? "#ffd700"
+                : wsStatus === "error" || wsStatus === "failed"
+                ? "#ff6b6b"
+                : "#f8f9fa",
+            color:
+              wsStatus === "connecting"
+                ? "#333"
+                : wsStatus === "error" || wsStatus === "failed"
+                ? "white"
+                : "#333",
+            position: "absolute",
+            top: "10px",
+            right: "10px",
+            zIndex: 100,
+            borderRadius: "4px",
+            boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
           <span>WebSocket: {wsStatus}</span>
-          {(wsStatus === "failed" || wsStatus === "error" || wsStatus === "disconnected") && (
-            <button 
+          {(wsStatus === "failed" ||
+            wsStatus === "error" ||
+            wsStatus === "disconnected") && (
+            <button
+              className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded flex items-center gap-2"
               onClick={() => {
                 reconnectAttemptRef.current = 0;
                 connectWebSocket();
@@ -457,7 +308,7 @@ export const CodeEditor = () => {
                 border: "none",
                 padding: "4px 8px",
                 borderRadius: "4px",
-                cursor: "pointer"
+                cursor: "pointer",
               }}
             >
               Reconnect
@@ -465,19 +316,95 @@ export const CodeEditor = () => {
           )}
         </div>
       )}
-      
-      <Editor
-        height="90vh"
-        defaultLanguage="javascript"
-        value={code}
-        onChange={handleEditorChange}
-        onMount={handleEditorDidMount}
-        options={{
-          minimap: { enabled: true },
-          scrollBeyondLastLine: false,
-          fontSize: 14
-        }}
-      />
+
+      {/* Toolbar */}
+      <div className="bg-gray-800 p-4 flex items-center justify-between">
+        <h1 className="text-xl font-bold">
+          {activeRoom ? `Room: ${activeRoom}` : "Real-Time Code Editor"}
+        </h1>
+        <div className="flex items-center gap-4">
+          {collaborators.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Users className="w-5 h-5" />
+              <span>{collaborators.length} Collaborator(s)</span>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded flex items-center gap-2"
+              onClick={handleCreateRoom}
+            >
+              Invite Collaborator
+              <Users className="w-5 h-5" />
+            </button>
+            {pendingInvites.length > 0 && (
+              <div className="relative">
+                <div className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full px-2 py-1 text-xs">
+                  {pendingInvites.length}
+                </div>
+                <Users className="w-5 h-5 text-gray-400" />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-auto">
+        <Editor
+          height="100%"
+          defaultLanguage="javascript"
+          theme="vs-dark"
+          value={code}
+          onChange={handleEditorChange}
+          options={{
+            minimap: { enabled: true },
+            fontSize: 14,
+            padding: { top: 10 },
+            scrollBeyondLastLine: false,
+            automaticLayout: true,
+            lineNumbers: "on",
+            tabSize: 2,
+          }}
+        />
+      </div>
+
+      {/* Invite Modal */}
+      {showInviteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 p-6 rounded-lg w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Invite Collaborator</h2>
+              <button
+                onClick={() => setShowInviteModal(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <input
+              type="email"
+              value={collaboratorEmail}
+              onChange={(e) => setCollaboratorEmail(e.target.value)}
+              placeholder="Enter collaborator's email"
+              className="w-full px-3 py-2 bg-gray-700 rounded text-white mb-4"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowInviteModal(false)}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendInvite}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded"
+              >
+                Send Collaboration Invite
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
