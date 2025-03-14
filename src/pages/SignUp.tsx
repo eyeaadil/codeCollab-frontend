@@ -1,10 +1,14 @@
 import React, { useState } from "react";
+import { useLocation } from "react-router-dom"; // Import useLocation
 import { motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 const SignUp = () => {
+  const location = useLocation(); // Get location from useLocation
+
+  const invitationToken = new URLSearchParams(location.search).get('token'); // Extract token from URL
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

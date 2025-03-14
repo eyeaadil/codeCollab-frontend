@@ -238,7 +238,7 @@ console.log("Attempting to connect to WebSocket at ws://localhost:4000");
       }
 
       // Send email invitation
-      const response = await fetch("/api/collaborate/invite", {
+      const response = await fetch("http://localhost:5000/api/collaborate/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -248,12 +248,21 @@ console.log("Attempting to connect to WebSocket at ws://localhost:4000");
         }),
       });
 
+
+      console.log("aaaaaaaaaaaaaaa",response);
+
       if (response.ok) {
         alert(`Invitation sent to ${collaboratorEmail}`);
         setCollaboratorEmail("");
         setShowInviteModal(false);
       } else {
-        throw new Error("Failed to send email invite");
+        const errorText = await response.text();
+
+
+        console.error("Server error details:", errorText);
+
+        
+        throw new Error(`Failed to send email invite: ${response.status} ${response.statusText}`);
       }
     } catch (error) {
       console.error("Error sending invite:", error);
