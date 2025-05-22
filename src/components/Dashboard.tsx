@@ -7,6 +7,7 @@ import { CodeEditor } from "./CodeEditor";
 // import { FolderList } from "./FolderList";
 import FileList from "./FileList";
 import FolderList from "./FolderList";
+import SimpleRealtimeTest from "./SimpleRealtimeTest";
 // import FileExplorer from "./FileExplorer";
 export const Dashboard = () => {
   return (
@@ -16,6 +17,7 @@ export const Dashboard = () => {
         <div className=" h-full w-full border:3px solid white" style={{ border:"3px solid red"}}> {/* Changed w-[80vw] to w-full */}
           {/* <FileExplorer /> */}
           <CodeEditor />
+          {/* <SimpleRealtimeTest/> */}
           {/* <FolderList /> */}
           {/* <FileList /> */}
         </div>

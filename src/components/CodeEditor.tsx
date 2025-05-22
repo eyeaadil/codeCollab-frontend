@@ -1,370 +1,225 @@
-import { useEffect, useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Editor from "@monaco-editor/react";
-import { X, Users } from "lucide-react";
+import { Users } from "lucide-react";
+import { useWebSocket } from "../hooks/useWebSocket";
+import { useParams } from 'react-router-dom';
+import * as monaco from 'monaco-editor';
+
+interface InviteModalProps {
+  show: boolean;
+  onClose: () => void;
+  email: string;
+  onEmailChange: (email: string) => void;
+  onSendInvite: () => void;
+}
+
+const InviteModal: React.FC<InviteModalProps> = ({ show, onClose, email, onEmailChange, onSendInvite }) => {
+  if (!show) return null;
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-gray-800 p-6 rounded-lg">
+        <h2 className="text-lg font-bold mb-4">Invite Collaborator</h2>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => onEmailChange(e.target.value)}
+          placeholder="Enter email"
+          className="w-full p-2 mb-4 bg-gray-700 text-white rounded"
+        />
+        <div className="flex gap-2">
+          <button onClick={onSendInvite} className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded">Send</button>
+          <button onClick={onClose} className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded">Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface NotificationProps {
+  message: string;
+  type: 'success' | 'error';
+  onClose: () => void;
+}
+
+const Notification: React.FC<NotificationProps> = ({ message, type, onClose }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+  return (
+    <div className={`fixed top-4 left-4 p-4 rounded ${type === 'success' ? 'bg-green-600' : 'bg-red-600'} text-white z-50`}>
+      {message}
+    </div>
+  );
+};
+
+interface UpdateMessage {
+  fileName: string;
+  content?: string;
+  isInitialLoad?: boolean;
+  isResponse?: boolean;
+  senderId?: string;
+}
 
 export const CodeEditor = () => {
-  // Editor state
   const [code, setCode] = useState("// Start coding here...");
-  const [activeRoom, setActiveRoom] = useState(null);
-  const [roomId, setRoomId] = useState(null);
-
-  // Collaboration state
+  const { roomId: fileName } = useParams<{ roomId: string }>();
+  const [activeFile, setActiveFile] = useState(fileName);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [collaboratorEmail, setCollaboratorEmail] = useState("");
-  const [collaborators, setCollaborators] = useState([]);
-  const [pendingInvites, setPendingInvites] = useState<string[]>([]);
-
-  // WebSocket state from tanzu
-  const wsRef = useRef(null);
-  const [wsStatus, setWsStatus] = useState("disconnected");
-  const messageQueueRef = useRef([]);
-  const reconnectAttemptRef = useRef(0);
-  const maxReconnectAttempts = 5;
-  const reconnectTimeoutRef = useRef(null);
-  const isConnectingRef = useRef(false);
-  const debounceTimeoutRef = useRef(null);
-  const lastContentRef = useRef("");
-  const clientIdRef = useRef(`client-${Math.random().toString(36).substring(2, 9)}`);
+  const [notification, setNotification] = useState<NotificationProps | null>(null);
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const receivingExternalChangesRef = useRef(false);
+  const initialContentLoadedRef = useRef(false);
+  const lastSentContentRef = useRef("");
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const previewRef = useRef<HTMLIFrameElement>(null);
+  const { wsStatus, sendMessage, reconnect, clientId, addMessageHandler, isConnected } = useWebSocket("ws://localhost:4000");
 
-  const connectWebSocket = () => {
-    if (isConnectingRef.current) return;
-
-    isConnectingRef.current = true;
-    setWsStatus("connecting");
-
-    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
-      wsRef.current.close();
-    }
-
-    try {
-      const socket = new WebSocket("ws://localhost:4000");
-      console.log("Attempting to connect to WebSocket at ws://localhost:4000");
-console.log("Attempting to connect to WebSocket at ws://localhost:4000");
-      wsRef.current = socket;
-
-      socket.onopen = () => {
-        setWsStatus("connected");
-        reconnectAttemptRef.current = 0;
-        isConnectingRef.current = false;
-        processQueue();
-
-        if (roomId) {
-          socket.send(JSON.stringify({
-            type: "join",
-            roomId: roomId,
-            clientId: clientIdRef.current,
-          }));
-          socket.send(JSON.stringify({
-            type: "getContent",
-            roomId: roomId,
-            clientId: clientIdRef.current,
-          }));
-        }
-      };
-
-      socket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          console.log("Received message:", data);
-
-          if (data.type === "update" && data.roomId === roomId) {
-            if (data.clientId === clientIdRef.current) return;
-
-            receivingExternalChangesRef.current = true;
-            setCode(data.content);
-            lastContentRef.current = data.content;
-            setTimeout(() => {
-              receivingExternalChangesRef.current = false;
-            }, 100);
-          } else if (data.type === "collaborators") {
-            setCollaborators(data.collaborators);
-            setPendingInvites(data.invitedEmails || []);
-          } else if (data.type === "invite") {
-            setPendingInvites(prev => [...prev, data.email]);
-          }
-        } catch (error) {
-          console.error("Error parsing WebSocket message:", error);
-        }
-      };
-
-      socket.onerror = (error) => {
-        console.error("WebSocket error:", error);
-        setWsStatus("error");
-      };
-
-      socket.onclose = (event) => {
-        setWsStatus("disconnected");
-        wsRef.current = null;
-        isConnectingRef.current = false;
-
-        if (event.wasClean) return;
-
-        if (reconnectAttemptRef.current < maxReconnectAttempts) {
-          const delay = Math.min(
-            1000 * Math.pow(1.5, reconnectAttemptRef.current),
-            10000
-          );
-          reconnectTimeoutRef.current = setTimeout(() => {
-            reconnectAttemptRef.current += 1;
-            connectWebSocket();
-          }, delay);
-        } else {
-          setWsStatus("failed");
-        }
-      };
-    } catch (error) {
-      console.error("Error creating WebSocket:", error);
-      setWsStatus("error");
-      isConnectingRef.current = false;
-    }
-  };
-
-  const processQueue = () => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
-    if (messageQueueRef.current.length > 0) {
-      const messagesToProcess = [...messageQueueRef.current];
-      messageQueueRef.current = [];
-
-      const latestMessages = new Map();
-      for (const msg of messagesToProcess) {
-        if (msg.type === "update") {
-          latestMessages.set(msg.roomId, msg);
-        } else {
-          wsRef.current.send(JSON.stringify(msg));
-        }
-      }
-
-      for (const msg of latestMessages.values()) {
-        wsRef.current.send(JSON.stringify(msg));
-      }
-    }
-  };
-
-  const sendMessage = (message) => {
-    const messageWithId = {
-      ...message,
-      clientId: clientIdRef.current,
-    };
-
-    if (message.type === "update" && lastContentRef.current === message.content) {
-      return false;
-    }
-    lastContentRef.current = message.content;
-
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(messageWithId));
-      return true;
-    } else {
-      if (message.type === "update") {
-        messageQueueRef.current = messageQueueRef.current.filter(
-          (msg) => !(msg.type === "update" && msg.roomId === message.roomId)
-        );
-      }
-      messageQueueRef.current.push(messageWithId);
-      reconnectIfNeeded();
-      return false;
-    }
-  };
-
-  const reconnectIfNeeded = () => {
-    if (
-      !isConnectingRef.current &&
-      (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED)
-    ) {
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      setTimeout(() => connectWebSocket(), 100);
-    }
-  };
-
-  // Initialize WebSocket
-  useEffect(() => {
-    connectWebSocket();
-    return () => {
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
-      if (wsRef.current) wsRef.current.close();
-    };
+  const debugLog = useCallback((message: string, data?: unknown) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] CodeEditor: ${message}`);
+    if (data) console.log(`[${timestamp}] CodeEditor Data:`, data);
   }, []);
 
-  // Handle room joining
   useEffect(() => {
-    if (roomId && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      sendMessage({ type: "join", roomId: roomId });
-      sendMessage({ type: "getContent", roomId: roomId });
+    if (activeFile && wsStatus === "connected") {
+      debugLog(`Joining file: ${activeFile}`);
+      initialContentLoadedRef.current = false;
+      sendMessage({ type: "join", fileName: activeFile });
     }
-  }, [roomId]);
+  }, [activeFile, wsStatus, sendMessage, debugLog]);
 
-  // Handle editor changes
-  const handleEditorChange = (value = "") => {
+  useEffect(() => {
+    const removeHandler = addMessageHandler((event) => {
+      try {
+        const data = JSON.parse(event.data);
+        debugLog('Received WebSocket message:', data);
+        switch (data.type) {
+          case "welcome":
+            debugLog(`Connected with client ID: ${data.clientId}`);
+            break;
+          case "joinConfirm":
+            debugLog(`Joined file: ${data.fileName}, subscribers: ${data.subscriberCount}`);
+            break;
+          case "update":
+            handleUpdateMessage(data);
+            break;
+          case "error":
+            debugLog(`Server error: ${data.message}`);
+            setNotification({ message: `Server error: ${data.message}`, type: 'error', onClose: () => setNotification(null) });
+            break;
+          default:
+            debugLog(`Unknown message type: ${data.type}`);
+        }
+      } catch (error) {
+        debugLog(`Error processing message: ${error}`);
+      }
+    });
+    return removeHandler;
+  }, [clientId, activeFile, addMessageHandler, debugLog]);
+
+  const handleUpdateMessage = useCallback((data: UpdateMessage) => {
+    if (data.fileName !== activeFile) return;
+    if (data.isInitialLoad || data.isResponse || (data.senderId && data.senderId !== clientId)) {
+      debugLog(`Applying update: ${data.content?.length || 0} chars`);
+      receivingExternalChangesRef.current = true;
+      setCode(data.content || "");
+      if (data.isInitialLoad) {
+        initialContentLoadedRef.current = true;
+        lastSentContentRef.current = data.content || "";
+      }
+      setTimeout(() => {
+        receivingExternalChangesRef.current = false;
+      }, 100);
+    }
+  }, [activeFile, clientId, debugLog]);
+
+  const handleEditorChange = useCallback((value: string | undefined = "") => {
     if (receivingExternalChangesRef.current) return;
-
+    debugLog(`Editor changed: ${value.length} chars`);
     setCode(value);
-    if (roomId) {
+    updatePreview(value);
+    if (activeFile && isConnected && value !== lastSentContentRef.current) {
       if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
       debounceTimeoutRef.current = setTimeout(() => {
-        sendMessage({
-          type: "update",
-          roomId: roomId,
-          content: value,
-        });
-      }, 300);
+        debugLog(`Sending update for ${activeFile}`);
+        sendMessage({ type: "update", fileName: activeFile, content: value });
+        lastSentContentRef.current = value;
+      }, 150);
     }
-  };
+  }, [activeFile, isConnected, sendMessage, debugLog]);
 
-  // Create or join a room
-  const handleCreateRoom = () => {
-    const newRoomId = `room-${Math.random().toString(36).substring(2, 9)}`;
-    setRoomId(newRoomId);
-    setActiveRoom(newRoomId);
-    setShowInviteModal(true);
-  };
-
-  // Send collaboration invite
-  const handleSendInvite = async () => {
-    if (!collaboratorEmail.trim() || !roomId) return;
-
-    try {
-      // Send invite via WebSocket
-      const inviteSent = sendMessage({
-        type: "invite",
-        roomId: roomId,
-        email: collaboratorEmail
-      });
-
-      if (!inviteSent) {
-        throw new Error("Failed to send invite via WebSocket");
+  const updatePreview = useCallback((code: string) => {
+    if (previewRef.current) {
+      const doc = previewRef.current.contentDocument;
+      if (doc) {
+        doc.open();
+        doc.write(code);
+        doc.close();
       }
+    }
+  }, []);
 
-      // Send email invitation
+  const handleEditorDidMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor) => {
+    debugLog('Editor mounted');
+    editorRef.current = editor;
+    editor.focus();
+  }, [debugLog]);
+
+  const handleManualSync = useCallback(() => {
+    if (activeFile && isConnected) {
+      debugLog('Manual sync');
+      sendMessage({ type: "getContent", fileName: activeFile });
+    }
+  }, [activeFile, isConnected, sendMessage, debugLog]);
+
+  const testConnection = useCallback(() => {
+    debugLog('Testing connection', { wsStatus, isConnected, activeFile, clientId });
+    setNotification({ message: `Status: ${wsStatus}, File: ${activeFile}`, type: 'success', onClose: () => setNotification(null) });
+  }, [wsStatus, isConnected, activeFile, clientId, debugLog]);
+
+  const handleSendInvite = async () => {
+    if (!collaboratorEmail.trim() || !activeFile) {
+      setNotification({ message: 'Invalid email or no active file', type: 'error', onClose: () => setNotification(null) });
+      return;
+    }
+    try {
       const response = await fetch("http://localhost:5000/api/collaborate/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          senderId: clientIdRef.current,
-          receiverEmail: collaboratorEmail,
-          roomId: roomId
-        }),
+        body: JSON.stringify({ senderId: clientId, receiverEmail: collaboratorEmail, roomId: activeFile }),
       });
-
-
-      console.log("aaaaaaaaaaaaaaa",response);
-
-      if (response.ok) {
-        alert(`Invitation sent to ${collaboratorEmail}`);
-        setCollaboratorEmail("");
-        setShowInviteModal(false);
-      } else {
-        const errorText = await response.text();
-
-
-        console.error("Server error details:", errorText);
-
-        
-        throw new Error(`Failed to send email invite: ${response.status} ${response.statusText}`);
-      }
-    } catch (error) {
-      console.error("Error sending invite:", error);
-      alert("Failed to send invitation. Please try again.");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to send invite');
+      setNotification({ message: `Invite sent to ${collaboratorEmail}`, type: 'success', onClose: () => setNotification(null) });
+      setCollaboratorEmail("");
+      setShowInviteModal(false);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to send invite';
+      debugLog(`Invite error: ${errorMessage}`);
+      setNotification({ message: errorMessage, type: 'error', onClose: () => setNotification(null) });
     }
   };
 
   return (
-    <div className="h-screen w-full flex flex-col bg-gray-900 text-white relative">
-      {/* WebSocket Status */}
-      {wsStatus !== "connected" && (
-        <div
-          className={`websocket-status ${wsStatus}`}
-          style={{
-            padding: "6px 12px",
-            backgroundColor:
-              wsStatus === "connecting"
-                ? "#ffd700"
-                : wsStatus === "error" || wsStatus === "failed"
-                ? "#ff6b6b"
-                : "#f8f9fa",
-            color:
-              wsStatus === "connecting"
-                ? "#333"
-                : wsStatus === "error" || wsStatus === "failed"
-                ? "white"
-                : "#333",
-            position: "absolute",
-            top: "10px",
-            right: "10px",
-            zIndex: 100,
-            borderRadius: "4px",
-            boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-          }}
-        >
-          <span>WebSocket: {wsStatus}</span>
-          {(wsStatus === "failed" ||
-            wsStatus === "error" ||
-            wsStatus === "disconnected") && (
-            <button
-              className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded flex items-center gap-2"
-              onClick={() => {
-                reconnectAttemptRef.current = 0;
-                connectWebSocket();
-              }}
-              style={{
-                backgroundColor: "#4285f4",
-                color: "white",
-                border: "none",
-                padding: "4px 8px",
-                borderRadius: "4px",
-                cursor: "pointer",
-              }}
-            >
-              Reconnect
+    <div className="h-screen w-full flex bg-gray-900 text-white">
+      <div className="w-full flex flex-col">
+        <div className="bg-gray-800 p-4 flex items-center justify-between">
+          <h1 className="text-xl font-bold">{activeFile ? `File: ${activeFile}` : "Real-Time Code Editor"}</h1>
+          <div className="flex gap-2">
+            <button onClick={() => setShowInviteModal(true)} className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded flex gap-2">
+              Invite <Users className="w-5 h-5" />
             </button>
-          )}
-        </div>
-      )}
-
-      {/* Toolbar */}
-      <div className="bg-gray-800 p-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold">
-          {activeRoom ? `Room: ${activeRoom}` : "Real-Time Code Editor"}
-        </h1>
-        <div className="flex items-center gap-4">
-          {collaborators.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Users className="w-5 h-5" />
-              <span>{collaborators.length} Collaborator(s)</span>
-            </div>
-          )}
-          <div className="flex items-center gap-2">
-            <button
-              className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded flex items-center gap-2"
-              onClick={handleCreateRoom}
-            >
-              Invite Collaborator
-              <Users className="w-5 h-5" />
-            </button>
-            {pendingInvites.length > 0 && (
-              <div className="relative">
-                <div className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full px-2 py-1 text-xs">
-                  {pendingInvites.length}
-                </div>
-                <Users className="w-5 h-5 text-gray-400" />
-              </div>
-            )}
           </div>
         </div>
-      </div>
-
-      <div className="flex-1 overflow-auto">
         <Editor
           height="100%"
-          defaultLanguage="javascript"
+          defaultLanguage="html"
           theme="vs-dark"
           value={code}
           onChange={handleEditorChange}
+          onMount={handleEditorDidMount}
           options={{
             minimap: { enabled: true },
             fontSize: 14,
@@ -373,47 +228,22 @@ console.log("Attempting to connect to WebSocket at ws://localhost:4000");
             automaticLayout: true,
             lineNumbers: "on",
             tabSize: 2,
+            wordWrap: "on",
           }}
         />
       </div>
-
-      {/* Invite Modal */}
-      {showInviteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 p-6 rounded-lg w-full max-w-md">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Invite Collaborator</h2>
-              <button
-                onClick={() => setShowInviteModal(false)}
-                className="text-gray-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <input
-              type="email"
-              value={collaboratorEmail}
-              onChange={(e) => setCollaboratorEmail(e.target.value)}
-              placeholder="Enter collaborator's email"
-              className="w-full px-3 py-2 bg-gray-700 rounded text-white mb-4"
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowInviteModal(false)}
-                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSendInvite}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded"
-              >
-                Send Collaboration Invite
-              </button>
-            </div>
+      {notification && <Notification message={notification.message} type={notification.type} onClose={() => setNotification(null)} />}
+      <InviteModal show={showInviteModal} onClose={() => setShowInviteModal(false)} email={collaboratorEmail} onEmailChange={setCollaboratorEmail} onSendInvite={handleSendInvite} />
+      <div className="absolute top-2 right-2">
+        {wsStatus === "connected" && <div className="bg-green-500 px-2 py-0.5 rounded text-sm">🟢 Connected</div>}
+        {wsStatus === "connecting" && <div className="bg-yellow-500 px-2 py-0.5 rounded text-sm">🟡 Connecting...</div>}
+        {(wsStatus === "disconnected" || wsStatus === "error" || wsStatus === "failed") && (
+          <div className="bg-red-500 px-2 py-0.5 rounded text-sm flex gap-2">
+            🔴 Disconnected
+            <button onClick={reconnect} className="bg-white text-red-500 px-1.5 py-0.5 rounded text-xs">Reconnect</button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
