@@ -1,70 +1,30 @@
+// components/CodeEditor.tsx
 import { useState, useRef, useEffect, useCallback } from "react";
 import Editor from "@monaco-editor/react";
 import { Users } from "lucide-react";
 import { useWebSocket } from "../hooks/useWebSocket";
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import * as monaco from 'monaco-editor';
+import { InviteModal } from "./InviteModal";
+import { Notification } from "./Notification";
 
-interface InviteModalProps {
-  show: boolean;
-  onClose: () => void;
-  email: string;
-  onEmailChange: (email: string) => void;
-  onSendInvite: () => void;
+interface UpdateMessage {
+  roomId: string; // Changed from fileName
+  content?: string;
+  isInitialLoad?: boolean;
+  isResponse?: boolean;
+  senderId?: string;
 }
-
-const InviteModal: React.FC<InviteModalProps> = ({ show, onClose, email, onEmailChange, onSendInvite }) => {
-  if (!show) return null;
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 p-6 rounded-lg">
-        <h2 className="text-lg font-bold mb-4">Invite Collaborator</h2>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => onEmailChange(e.target.value)}
-          placeholder="Enter email"
-          className="w-full p-2 mb-4 bg-gray-700 text-white rounded"
-        />
-        <div className="flex gap-2">
-          <button onClick={onSendInvite} className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded">Send</button>
-          <button onClick={onClose} className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded">Cancel</button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 interface NotificationProps {
   message: string;
   type: 'success' | 'error';
   onClose: () => void;
 }
 
-const Notification: React.FC<NotificationProps> = ({ message, type, onClose }) => {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 3000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
-  return (
-    <div className={`fixed top-4 left-4 p-4 rounded ${type === 'success' ? 'bg-green-600' : 'bg-red-600'} text-white z-50`}>
-      {message}
-    </div>
-  );
-};
-
-interface UpdateMessage {
-  fileName: string;
-  content?: string;
-  isInitialLoad?: boolean;
-  isResponse?: boolean;
-  senderId?: string;
-}
-
 export const CodeEditor = () => {
   const [code, setCode] = useState("// Start coding here...");
-  const { roomId: fileName } = useParams<{ roomId: string }>();
-  const [activeFile, setActiveFile] = useState(fileName);
+  const { roomId } = useParams<{ roomId: string }>();
+  const [activeFile, setActiveFile] = useState(roomId);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [collaboratorEmail, setCollaboratorEmail] = useState("");
   const [notification, setNotification] = useState<NotificationProps | null>(null);
@@ -73,8 +33,17 @@ export const CodeEditor = () => {
   const initialContentLoadedRef = useRef(false);
   const lastSentContentRef = useRef("");
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-  const previewRef = useRef<HTMLIFrameElement>(null);
-  const { wsStatus, sendMessage, reconnect, clientId, addMessageHandler, isConnected } = useWebSocket("ws://localhost:4000");
+  const navigate = useNavigate();
+
+  // Get token from cookies
+  const token = document.cookie
+    .split('; ')
+    .find(row => row.startsWith('access_token='))
+    ?.split('=')[1];
+
+  const { wsStatus, sendMessage, reconnect, clientId, addMessageHandler, isConnected } = useWebSocket(
+    `ws://localhost:4000?token=${token}`
+  );
 
   const debugLog = useCallback((message: string, data?: unknown) => {
     const timestamp = new Date().toISOString();
@@ -83,10 +52,17 @@ export const CodeEditor = () => {
   }, []);
 
   useEffect(() => {
+    if (!token) {
+      debugLog('No token found, redirecting to signin');
+      navigate(`/signin?roomId=${roomId}`);
+    }
+  }, [token, roomId, navigate, debugLog]);
+
+  useEffect(() => {
     if (activeFile && wsStatus === "connected") {
-      debugLog(`Joining file: ${activeFile}`);
+      debugLog(`Joining room: ${activeFile}`);
       initialContentLoadedRef.current = false;
-      sendMessage({ type: "join", fileName: activeFile });
+      sendMessage({ type: "join", roomId: activeFile });
     }
   }, [activeFile, wsStatus, sendMessage, debugLog]);
 
@@ -100,7 +76,7 @@ export const CodeEditor = () => {
             debugLog(`Connected with client ID: ${data.clientId}`);
             break;
           case "joinConfirm":
-            debugLog(`Joined file: ${data.fileName}, subscribers: ${data.subscriberCount}`);
+            debugLog(`Joined room: ${data.roomId}, subscribers: ${data.subscriberCount}`);
             break;
           case "update":
             handleUpdateMessage(data);
@@ -108,6 +84,9 @@ export const CodeEditor = () => {
           case "error":
             debugLog(`Server error: ${data.message}`);
             setNotification({ message: `Server error: ${data.message}`, type: 'error', onClose: () => setNotification(null) });
+            if (data.message.includes('Unauthorized')) {
+              navigate(`/signin?roomId=${roomId}`);
+            }
             break;
           default:
             debugLog(`Unknown message type: ${data.type}`);
@@ -117,10 +96,10 @@ export const CodeEditor = () => {
       }
     });
     return removeHandler;
-  }, [clientId, activeFile, addMessageHandler, debugLog]);
+  }, [clientId, activeFile, addMessageHandler, debugLog, navigate, roomId]);
 
   const handleUpdateMessage = useCallback((data: UpdateMessage) => {
-    if (data.fileName !== activeFile) return;
+    if (data.roomId !== activeFile) return;
     if (data.isInitialLoad || data.isResponse || (data.senderId && data.senderId !== clientId)) {
       debugLog(`Applying update: ${data.content?.length || 0} chars`);
       receivingExternalChangesRef.current = true;
@@ -139,27 +118,15 @@ export const CodeEditor = () => {
     if (receivingExternalChangesRef.current) return;
     debugLog(`Editor changed: ${value.length} chars`);
     setCode(value);
-    updatePreview(value);
     if (activeFile && isConnected && value !== lastSentContentRef.current) {
       if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
       debounceTimeoutRef.current = setTimeout(() => {
         debugLog(`Sending update for ${activeFile}`);
-        sendMessage({ type: "update", fileName: activeFile, content: value });
+        sendMessage({ type: "update", roomId: activeFile, content: value });
         lastSentContentRef.current = value;
       }, 150);
     }
   }, [activeFile, isConnected, sendMessage, debugLog]);
-
-  const updatePreview = useCallback((code: string) => {
-    if (previewRef.current) {
-      const doc = previewRef.current.contentDocument;
-      if (doc) {
-        doc.open();
-        doc.write(code);
-        doc.close();
-      }
-    }
-  }, []);
 
   const handleEditorDidMount = useCallback((editor: monaco.editor.IStandaloneCodeEditor) => {
     debugLog('Editor mounted');
@@ -167,27 +134,18 @@ export const CodeEditor = () => {
     editor.focus();
   }, [debugLog]);
 
-  const handleManualSync = useCallback(() => {
-    if (activeFile && isConnected) {
-      debugLog('Manual sync');
-      sendMessage({ type: "getContent", fileName: activeFile });
-    }
-  }, [activeFile, isConnected, sendMessage, debugLog]);
-
-  const testConnection = useCallback(() => {
-    debugLog('Testing connection', { wsStatus, isConnected, activeFile, clientId });
-    setNotification({ message: `Status: ${wsStatus}, File: ${activeFile}`, type: 'success', onClose: () => setNotification(null) });
-  }, [wsStatus, isConnected, activeFile, clientId, debugLog]);
-
   const handleSendInvite = async () => {
     if (!collaboratorEmail.trim() || !activeFile) {
-      setNotification({ message: 'Invalid email or no active file', type: 'error', onClose: () => setNotification(null) });
+      setNotification({ message: 'Invalid email or no active room', type: 'error', onClose: () => setNotification(null) });
       return;
     }
     try {
       const response = await fetch("http://localhost:5000/api/collaborate/invite", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ senderId: clientId, receiverEmail: collaboratorEmail, roomId: activeFile }),
       });
       const data = await response.json();
@@ -195,7 +153,7 @@ export const CodeEditor = () => {
       setNotification({ message: `Invite sent to ${collaboratorEmail}`, type: 'success', onClose: () => setNotification(null) });
       setCollaboratorEmail("");
       setShowInviteModal(false);
-    } catch (error: unknown) {
+    } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to send invite';
       debugLog(`Invite error: ${errorMessage}`);
       setNotification({ message: errorMessage, type: 'error', onClose: () => setNotification(null) });
@@ -206,7 +164,7 @@ export const CodeEditor = () => {
     <div className="h-screen w-full flex bg-gray-900 text-white">
       <div className="w-full flex flex-col">
         <div className="bg-gray-800 p-4 flex items-center justify-between">
-          <h1 className="text-xl font-bold">{activeFile ? `File: ${activeFile}` : "Real-Time Code Editor"}</h1>
+          <h1 className="text-xl font-bold">{activeFile ? `Room: ${activeFile}` : "Real-Time Code Editor"}</h1>
           <div className="flex gap-2">
             <button onClick={() => setShowInviteModal(true)} className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded flex gap-2">
               Invite <Users className="w-5 h-5" />

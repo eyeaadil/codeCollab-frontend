@@ -1,8 +1,9 @@
+// hooks/useWebSocket.tsx
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 interface WebSocketMessage {
   type: string;
-  fileName?: string;
+  roomId?: string; // Changed from fileName
   content?: string;
   isInitialLoad?: boolean;
   isResponse?: boolean;
@@ -159,7 +160,7 @@ export const useWebSocket = (url: string) => {
     handlers: messageHandlersRef.current.length,
     reconnectAttempts: reconnectAttemptRef.current,
     readyState: wsRef.current?.readyState,
-    url: wsRef.current?.url
+    url: wsRef.current?.url,
   }), [wsStatus]);
 
   useEffect(() => {

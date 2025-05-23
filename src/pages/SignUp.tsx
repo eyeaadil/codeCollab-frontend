@@ -1,26 +1,25 @@
+// pages/SignUp.tsx
 import React, { useState } from "react";
-import { useLocation } from "react-router-dom"; // Import useLocation
+import { useLocation, useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Link, useNavigate } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 const SignUp = () => {
-  const location = useLocation(); // Get location from useLocation
-
-  const invitationToken = new URLSearchParams(location.search).get('token'); // Extract token from URL
+  const location = useLocation();
+  const navigate = useNavigate();
+  const roomId = new URLSearchParams(location.search).get('roomId'); // Extract roomId from URL
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const navigate = useNavigate();
 
-  const handleSignUp = async (e) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (password !== confirmPassword) {
       toast.error("Passwords do not match", {
-        position: "top-center", // Set to middle of the screen
+        position: "top-center",
         autoClose: 3000,
         hideProgressBar: false,
         closeOnClick: true,
@@ -38,23 +37,28 @@ const SignUp = () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          username: fullName,
+          name: fullName, // Changed from username to name to match authController
           email,
           password,
+          roomId, // Include roomId
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to sign up");
+        throw new Error(errorData.message || "Failed to sign up");
       }
 
       const data = await response.json();
       console.log("Sign-up successful:", data);
 
+      // Store tokens in cookies
+      document.cookie = `access_token=${data.user.accessToken}; path=/; samesite=strict`;
+      document.cookie = `refresh_token=${data.user.refreshToken}; path=/; samesite=strict`;
+
       // Show success toast notification
-      toast.success("Registration successful! Redirecting to Sign In...", {
-        position: "top-center", // Set to middle of the screen
+      toast.success("Registration successful! Redirecting...", {
+        position: "top-center",
         autoClose: 3000,
         hideProgressBar: false,
         closeOnClick: true,
@@ -63,13 +67,12 @@ const SignUp = () => {
         progress: undefined,
       });
 
-      // Navigate to sign-in page after a delay
-      setTimeout(() => {
-        navigate("/signin");
-      }, 3000);
+      // Navigate to join-room or dashboard
+      const redirectUrl = data.redirectUrl || "/dashboard";
+      setTimeout(() => navigate(redirectUrl), 3000);
     } catch (err) {
-      toast.error(err.message, {
-        position: "top-center", // Set to middle of the screen
+      toast.error(err.message || "An error occurred!", {
+        position: "top-center",
         autoClose: 3000,
         hideProgressBar: false,
         closeOnClick: true,
@@ -83,7 +86,7 @@ const SignUp = () => {
   return (
     <div className="min-h-screen relative overflow-hidden bg-editor-bg flex items-center justify-center">
       <ToastContainer
-        position="top-center" // Center position
+        position="top-center"
         autoClose={3000}
         hideProgressBar={false}
         newestOnTop={false}

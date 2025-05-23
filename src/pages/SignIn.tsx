@@ -1,21 +1,29 @@
+// pages/SignIn.tsx
 import { motion } from "framer-motion";
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
 
-const SignIn = ({ setIsAuthenticated }) => {
+interface SignInProps {
+  setIsAuthenticated: (value: boolean) => void;
+}
+
+const SignIn = ({ setIsAuthenticated }: SignInProps) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const handleSignIn = async (e) => {
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
 
     try {
+      const params = new URLSearchParams(location.search);
+      const roomId = params.get('roomId'); // Extract roomId from URL
       const response = await fetch("http://localhost:5000/api/auth/login", {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, roomId }), // Include roomId
         headers: {
           "Content-Type": "application/json",
         },
@@ -23,7 +31,7 @@ const SignIn = ({ setIsAuthenticated }) => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to sign in");
+        throw new Error(errorData.message || "Failed to sign in");
       }
 
       const data = await response.json();
@@ -33,10 +41,13 @@ const SignIn = ({ setIsAuthenticated }) => {
       document.cookie = `access_token=${data.user.accessToken}; path=/; samesite=strict`;
       document.cookie = `refresh_token=${data.user.refreshToken}; path=/; samesite=strict`;
 
-      // Set authentication state and navigate
+      // Set authentication state
       setIsAuthenticated(true);
       toast.success("Login successful! Redirecting...", { autoClose: 2000 });
-      setTimeout(() => navigate("/dashboard"), 2000);
+
+      // Redirect to /join-room if roomId is present, else to /dashboard
+      const redirectUrl = data.redirectUrl || "/dashboard";
+      setTimeout(() => navigate(redirectUrl), 2000);
     } catch (err) {
       toast.error(err.message || "An error occurred!", { autoClose: 3000 });
     }
