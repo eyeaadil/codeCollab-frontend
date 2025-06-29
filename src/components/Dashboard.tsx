@@ -12,13 +12,13 @@ interface NotificationProps {
 
 
 export const Dashboard = () => {
-  const [name, setName] = useState('');
+  const [roomIdInput, setRoomIdInput] = useState('');
   const [notification, setNotification] = useState<NotificationProps | null>(null);
   const navigate = useNavigate();
 
   const handleCreateRoom = async () => {
-    if (!name.trim()) {
-      setNotification({ message: 'Please enter a file name', type: 'error', onClose: () => setNotification(null) });
+    if (!roomIdInput.trim()) {
+      setNotification({ message: 'Please enter a Room ID', type: 'error', onClose: () => setNotification(null) });
       return;
     }
 
@@ -43,9 +43,11 @@ export const Dashboard = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          // 'Accept': 'application/json'
         },
-        body: JSON.stringify({ fileName: name }),
+        // credentials: 'include',
+        body: JSON.stringify({ roomId: roomIdInput, name: roomIdInput }),
       });
 
       console.log("resssssssssssssssssssssssssssssss",response)
@@ -73,9 +75,9 @@ export const Dashboard = () => {
         <h2 className="text-xl font-bold mb-4">Create a New Room</h2>
         <input
           type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Enter file name"
+          value={roomIdInput}
+          onChange={(e) => setRoomIdInput(e.target.value)}
+          placeholder="Enter Room ID"
           className="w-full px-3 py-2 bg-gray-700 rounded text-white mb-4"
         />
         <button
