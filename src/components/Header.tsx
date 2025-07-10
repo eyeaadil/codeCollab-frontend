@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FaUserCircle } from "react-icons/fa";
 
-const Header = ({ isAuthenticated, setIsAuthenticated }) => {
+const Header = ({ isAuthenticated, setIsAuthenticated, isLoadingAuth }) => {
   const navigate = useNavigate();
   const [isDropdownVisible, setIsDropdownVisible] = useState(false);
 
@@ -58,7 +58,10 @@ const Header = ({ isAuthenticated, setIsAuthenticated }) => {
 
         {/* Navigation */}
         <nav className="flex items-center gap-6">
-          {!isAuthenticated ? (
+          {isLoadingAuth ? (
+            // Optionally, show a loading spinner or nothing at all
+            <div className="text-editor-text">Loading...</div>
+          ) : !isAuthenticated ? (
             <>
               <Link
                 to="/signin"

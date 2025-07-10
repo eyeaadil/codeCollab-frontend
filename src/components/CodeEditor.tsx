@@ -7,6 +7,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import * as monaco from 'monaco-editor';
 import { InviteModal } from "./InviteModal";
 import { Notification } from "./Notification";
+import { ChevronDown, ChevronRight, Play, Terminal } from 'lucide-react';
 
 interface UpdateMessage {
   roomId: string; // Changed from fileName
@@ -34,6 +35,10 @@ export const CodeEditor = () => {
   const lastSentContentRef = useRef("");
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const navigate = useNavigate();
+  const [output, setOutput] = useState<string>('');
+  const [errorOutput, setErrorOutput] = useState<string>('');
+  const [showOutput, setShowOutput] = useState<boolean>(false);
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('javascript');
 
   // Get token from cookies
   const token = document.cookie
@@ -132,7 +137,62 @@ export const CodeEditor = () => {
     debugLog('Editor mounted');
     editorRef.current = editor;
     editor.focus();
+    // Set initial language from editor instance if available
+    const model = editor.getModel();
+    if (model) {
+      setSelectedLanguage(model.getLanguageId());
+    }
   }, [debugLog]);
+
+  const handleRunCode = async () => {
+    if (!editorRef.current) {
+      setNotification({ message: 'Editor not ready.', type: 'error', onClose: () => setNotification(null) });
+      return;
+    }
+    const currentCode = editorRef.current.getValue();
+    if (!currentCode.trim()) {
+      setNotification({ message: 'Please enter code to run.', type: 'error', onClose: () => setNotification(null) });
+      return;
+    }
+
+    setOutput('Running code...');
+    setErrorOutput('');
+    setShowOutput(true);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/execute-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          language: selectedLanguage,
+          code: currentCode,
+          // input: '' // Add input if needed later
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setOutput(data.output || '(No output)');
+        setErrorOutput(data.error || '');
+        if (data.error) {
+          setNotification({ message: 'Code executed with errors.', type: 'error', onClose: () => setNotification(null) });
+        } else {
+          setNotification({ message: 'Code executed successfully.', type: 'success', onClose: () => setNotification(null) });
+        }
+      } else {
+        throw new Error(data.message || 'Failed to execute code.');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred during execution.';
+      console.error('Code execution error:', error);
+      setOutput('');
+      setErrorOutput(errorMessage);
+      setNotification({ message: `Execution failed: ${errorMessage}`, type: 'error', onClose: () => setNotification(null) });
+    }
+  };
 
   const handleSendInvite = async () => {
     if (!collaboratorEmail.trim() || !activeFile) {
@@ -169,11 +229,26 @@ export const CodeEditor = () => {
             <button onClick={() => setShowInviteModal(true)} className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded flex gap-2">
               Invite <Users className="w-5 h-5" />
             </button>
+            <select
+              value={selectedLanguage}
+              onChange={(e) => setSelectedLanguage(e.target.value)}
+              className="bg-gray-700 text-white px-3 py-2 rounded focus:outline-none"
+            >
+              <option value="javascript">JavaScript</option>
+              <option value="python">Python</option>
+              <option value="java">Java</option>
+              <option value="c">C</option>
+              <option value="cpp">C++</option>
+            </select>
+            <button onClick={handleRunCode} className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded flex gap-2">
+              Run <Play className="w-5 h-5" />
+            </button>
           </div>
         </div>
         <Editor
           height="100%"
-          defaultLanguage="html"
+          defaultLanguage="javascript"
+          language={selectedLanguage} // Set language dynamically
           theme="vs-dark"
           value={code}
           onChange={handleEditorChange}
@@ -189,6 +264,23 @@ export const CodeEditor = () => {
             wordWrap: "on",
           }}
         />
+        {showOutput && (
+          <div className="bg-gray-800 p-4 border-t border-gray-700 mt-2">
+            <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowOutput(!showOutput)}>
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <Terminal className="w-5 h-5" /> Output
+              </h2>
+              {showOutput ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+            </div>
+            {showOutput && (
+              <div className="mt-2 bg-gray-900 p-3 rounded text-sm overflow-auto max-h-48">
+                {output && <pre className="text-green-300 whitespace-pre-wrap">{output}</pre>}
+                {errorOutput && <pre className="text-red-400 whitespace-pre-wrap">{errorOutput}</pre>}
+                {!output && !errorOutput && <p className="text-gray-500">No output yet.</p>}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       {notification && <Notification message={notification.message} type={notification.type} onClose={() => setNotification(null)} />}
       <InviteModal show={showInviteModal} onClose={() => setShowInviteModal(false)} email={collaboratorEmail} onEmailChange={setCollaboratorEmail} onSendInvite={handleSendInvite} />

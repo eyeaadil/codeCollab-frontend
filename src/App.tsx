@@ -1,5 +1,5 @@
 // App.tsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Toaster } from "./components/ui/toaster";
 import { Toaster as Sonner } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
@@ -17,6 +17,24 @@ const queryClient = new QueryClient();
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true); // New loading state
+
+  useEffect(() => {
+    // Check for authentication token in cookies on app load
+    const token = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('access_token='))
+      ?.split('=')[1];
+
+    if (token) {
+      // Here you might want to send the token to the backend to verify its validity
+      // For now, we'll assume its presence means authenticated
+      setIsAuthenticated(true);
+    } else {
+      setIsAuthenticated(false);
+    }
+    setIsLoadingAuth(false); // Auth check complete
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -24,7 +42,7 @@ const App = () => {
         <Toaster />
         <Sonner />
         <Router>
-          <Header isAuthenticated={isAuthenticated} setIsAuthenticated={setIsAuthenticated} />
+          <Header isAuthenticated={isAuthenticated} setIsAuthenticated={setIsAuthenticated} isLoadingAuth={isLoadingAuth} /> {/* Pass isLoadingAuth */}
           <Routes>
             <Route path="/" element={<Index/>} />
             <Route path="/dashboard" element={<Dashboard/>} />
