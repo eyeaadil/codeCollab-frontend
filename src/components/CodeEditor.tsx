@@ -8,6 +8,7 @@ import * as monaco from 'monaco-editor';
 import { InviteModal } from "./InviteModal";
 import { Notification } from "./Notification";
 import { ChevronDown, ChevronRight, Play, Terminal } from 'lucide-react';
+import axios from 'axios';
 
 interface UpdateMessage {
   roomId: string; // Changed from fileName
@@ -149,7 +150,10 @@ export const CodeEditor = () => {
       setNotification({ message: 'Editor not ready.', type: 'error', onClose: () => setNotification(null) });
       return;
     }
+
+    console.log("currentCodeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     const currentCode = editorRef.current.getValue();
+    console.log("currentCode", currentCode);
     if (!currentCode.trim()) {
       setNotification({ message: 'Please enter code to run.', type: 'error', onClose: () => setNotification(null) });
       return;
@@ -160,21 +164,21 @@ export const CodeEditor = () => {
     setShowOutput(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/execute-code', {
-        method: 'POST',
+      console.log("currentCode");
+      const response = await axios.post('http://localhost:5000/api/execute-code/run-code', {
+        language: selectedLanguage,
+        code: currentCode,
+      }, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          language: selectedLanguage,
-          code: currentCode,
-          // input: '' // Add input if needed later
-        }),
       });
 
-      const data = await response.json();
-      if (response.ok && data.success) {
+      console.log("response", response);
+
+      const data = response.data;
+      if (response.status === 200 && data.success) {
         setOutput(data.output || '(No output)');
         setErrorOutput(data.error || '');
         if (data.error) {
@@ -200,16 +204,18 @@ export const CodeEditor = () => {
       return;
     }
     try {
-      const response = await fetch("http://localhost:5000/api/collaborate/invite", {
-        method: "POST",
+      const response = await axios.post("http://localhost:5000/api/collaborate/invite", {
+        senderId: clientId,
+        receiverEmail: collaboratorEmail,
+        roomId: activeFile
+      }, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ senderId: clientId, receiverEmail: collaboratorEmail, roomId: activeFile }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Failed to send invite');
+      const data = response.data;
+      if (response.status !== 200) throw new Error(data.message || 'Failed to send invite');
       setNotification({ message: `Invite sent to ${collaboratorEmail}`, type: 'success', onClose: () => setNotification(null) });
       setCollaboratorEmail("");
       setShowInviteModal(false);
