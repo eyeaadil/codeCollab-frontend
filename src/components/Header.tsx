@@ -12,7 +12,7 @@ const Header = ({ isAuthenticated, setIsAuthenticated, isLoadingAuth }) => {
       // Call the backend logout controller
 
       console.log("login initiated");
-      const response = await fetch("http://localhost:5000/api/auth/logout", {
+      const response = await fetch("https://codecollab-backend-1.onrender.com/api/auth/logout", {
         method: "POST",
         // credentials: "include", // Ensure cookies are sent with the request
         headers: {

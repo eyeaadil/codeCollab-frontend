@@ -39,7 +39,7 @@ export const Dashboard = () => {
         'Authorization': `Bearer ${token}`
       });
 
-      const response = await fetch('http://localhost:5000/api/collaborate/create-room', {
+      const response = await fetch('https://codecollab-backend-1.onrender.com/api/collaborate/create-room', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

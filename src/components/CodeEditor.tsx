@@ -49,7 +49,7 @@ export const CodeEditor = () => {
     ?.split('=')[1];
 
   const { wsStatus, sendMessage, reconnect, clientId, addMessageHandler, isConnected } = useWebSocket(
-    `ws://localhost:5000/ws?token=${token}`
+    `wss://codecollab-backend-1.onrender.com/ws?token=${token}` 
   );
 
   const debugLog = useCallback((message: string, data?: unknown) => {
@@ -181,7 +181,7 @@ export const CodeEditor = () => {
 
     try {
       const currentCode = editorRef.current.getValue();
-      const response = await axios.post('http://localhost:5000/api/execute-code/run-code', {
+      const response = await axios.post('https://codecollab-backend-1.onrender.com/api/execute-code/run-code', {
         language: selectedLanguage,
         code: currentCode,
       }, {
@@ -223,7 +223,7 @@ export const CodeEditor = () => {
       return;
     }
     try {
-      const response = await axios.post("http://localhost:5000/api/collaborate/invite", {
+      const response = await axios.post("https://codecollab-backend-1.onrender.com/api/collaborate/invite", {
         senderId: clientId,
         receiverEmail: collaboratorEmail,
         roomId: activeFile
