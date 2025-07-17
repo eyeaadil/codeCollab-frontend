@@ -40,6 +40,7 @@ export const CodeEditor = () => {
   const [errorOutput, setErrorOutput] = useState<string>('');
   const [showOutput, setShowOutput] = useState<boolean>(false);
   const [selectedLanguage, setSelectedLanguage] = useState<string>('javascript');
+  const [isExecuting, setIsExecuting] = useState<boolean>(false);
 
   // Get token from cookies
   const token = document.cookie
@@ -48,7 +49,7 @@ export const CodeEditor = () => {
     ?.split('=')[1];
 
   const { wsStatus, sendMessage, reconnect, clientId, addMessageHandler, isConnected } = useWebSocket(
-    `ws://localhost:4000?token=${token}`
+    `ws://localhost:5000/ws?token=${token}`
   );
 
   const debugLog = useCallback((message: string, data?: unknown) => {
@@ -86,6 +87,27 @@ export const CodeEditor = () => {
             break;
           case "update":
             handleUpdateMessage(data);
+            break;
+          case "execution_start":
+            setIsExecuting(true);
+            setOutput('Running code...');
+            setErrorOutput('');
+            setShowOutput(true);
+            break;
+          case "execution_result":
+            if (data.output !== undefined) setOutput(data.output);
+            if (data.error !== undefined) setErrorOutput(data.error);
+            if (data.error) {
+              setNotification({ message: 'Code executed with errors.', type: 'error', onClose: () => setNotification(null) });
+            } else {
+              setNotification({ message: 'Code executed successfully.', type: 'success', onClose: () => setNotification(null) });
+            }
+            setIsExecuting(false);
+            break;
+          case "language_change":
+            if (data.language) {
+              setSelectedLanguage(data.language);
+            }
             break;
           case "error":
             debugLog(`Server error: ${data.message}`);
@@ -151,20 +173,14 @@ export const CodeEditor = () => {
       return;
     }
 
-    console.log("currentCodeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-    const currentCode = editorRef.current.getValue();
-    console.log("currentCode", currentCode);
-    if (!currentCode.trim()) {
-      setNotification({ message: 'Please enter code to run.', type: 'error', onClose: () => setNotification(null) });
-      return;
-    }
-
+    setIsExecuting(true); // Set executing state
     setOutput('Running code...');
     setErrorOutput('');
-    setShowOutput(true);
+    setShowOutput(true); // Always show output when run starts
+    sendMessage({ type: "execution_start", roomId: activeFile, senderId: clientId });
 
     try {
-      console.log("currentCode");
+      const currentCode = editorRef.current.getValue();
       const response = await axios.post('http://localhost:5000/api/execute-code/run-code', {
         language: selectedLanguage,
         code: currentCode,
@@ -175,8 +191,6 @@ export const CodeEditor = () => {
         },
       });
 
-      console.log("response", response);
-
       const data = response.data;
       if (response.status === 200 && data.success) {
         setOutput(data.output || '(No output)');
@@ -186,6 +200,8 @@ export const CodeEditor = () => {
         } else {
           setNotification({ message: 'Code executed successfully.', type: 'success', onClose: () => setNotification(null) });
         }
+        // Send execution result via WebSocket
+        sendMessage({ type: "execution_result", roomId: activeFile, output: data.output, error: data.error, exitCode: data.exitCode });
       } else {
         throw new Error(data.message || 'Failed to execute code.');
       }
@@ -195,6 +211,9 @@ export const CodeEditor = () => {
       setOutput('');
       setErrorOutput(errorMessage);
       setNotification({ message: `Execution failed: ${errorMessage}`, type: 'error', onClose: () => setNotification(null) });
+      sendMessage({ type: "execution_result", roomId: activeFile, output: '', error: errorMessage, exitCode: 1 }); // Send error result
+    } finally {
+      setIsExecuting(false); // Reset executing state
     }
   };
 
@@ -237,7 +256,11 @@ export const CodeEditor = () => {
             </button>
             <select
               value={selectedLanguage}
-              onChange={(e) => setSelectedLanguage(e.target.value)}
+              onChange={(e) => {
+                const newLanguage = e.target.value;
+                setSelectedLanguage(newLanguage);
+                sendMessage({ type: "language_change", roomId: activeFile, language: newLanguage });
+              }}
               className="bg-gray-700 text-white px-3 py-2 rounded focus:outline-none"
             >
               <option value="javascript">JavaScript</option>
@@ -246,7 +269,8 @@ export const CodeEditor = () => {
               <option value="c">C</option>
               <option value="cpp">C++</option>
             </select>
-            <button onClick={handleRunCode} className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded flex gap-2">
+            <button onClick={handleRunCode} className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded flex gap-2"
+              disabled={isExecuting}> {/* Disable button during execution */}
               Run <Play className="w-5 h-5" />
             </button>
           </div>

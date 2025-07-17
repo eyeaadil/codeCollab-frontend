@@ -12,6 +12,10 @@ interface WebSocketMessage {
   timestamp?: number;
   subscriberCount?: number;
   message?: string;
+  output?: string;
+  error?: string;
+  exitCode?: number;
+  language?: string;
 }
 
 export const useWebSocket = (url: string) => {
