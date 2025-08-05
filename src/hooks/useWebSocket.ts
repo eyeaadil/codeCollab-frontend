@@ -16,6 +16,7 @@ interface WebSocketMessage {
   error?: string;
   exitCode?: number;
   language?: string;
+  input?: string; // Add this for input synchronization
 }
 
 export const useWebSocket = (url: string) => {
